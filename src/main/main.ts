@@ -102,6 +102,20 @@ function createWindow() {
   resizePlayer();
   mainWindow.on("resize", resizePlayer);
 
+  // Handle window close properly
+  mainWindow.on("close", (e) => {
+    // Clean up player view
+    if (playerView && mainWindow) {
+      mainWindow.contentView.removeChildView(playerView);
+      playerView.webContents.close();
+      playerView = null;
+    }
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
   // Create HTTP server and wait for it to be ready
   const port = createPlayerServer();
   
@@ -133,6 +147,22 @@ app.on("activate", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (httpServer) httpServer.close();
-  if (process.platform !== "darwin") app.quit();
+  // Close HTTP server
+  if (httpServer) {
+    httpServer.close(() => {
+      console.log('HTTP server closed');
+    });
+    httpServer = null;
+  }
+  
+  // Quit app on all platforms (including macOS)
+  app.quit();
+});
+
+app.on("before-quit", () => {
+  // Ensure HTTP server is closed
+  if (httpServer) {
+    httpServer.close();
+    httpServer = null;
+  }
 });

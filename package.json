@@ -36,10 +36,8 @@
   },
   "keywords": [],
   "license": "ISC",
-  "dependencies": {
-    "electron": "^39.2.7"
-  },
   "devDependencies": {
+    "electron": "^39.2.7",
     "@types/node": "^25.0.9",
     "electron-builder": "^26.4.0",
     "typescript": "^5.9.3"
