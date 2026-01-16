@@ -1,9 +1,10 @@
-import { app, BrowserWindow, WebContentsView, session, protocol, ipcMain } from "electron";
+import { app, BrowserWindow, WebContentsView, session, protocol, ipcMain, net } from "electron";
 import path from "node:path";
 import http from "node:http";
 import fs from "node:fs";
 import { buildContainer } from "./di/container";
 import { registerIpc } from "./ipc/registerIpc";
+import { URL } from "url";
 
 let mainWindow: BrowserWindow | null = null;
 let playerView: WebContentsView | null = null;
@@ -52,7 +53,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webSecurity: true
     }
   });
 

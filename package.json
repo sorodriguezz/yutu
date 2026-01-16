@@ -6,7 +6,7 @@
   "main": "dist/main/main.js",
   "scripts": {
     "build": "tsc && npm run copy:assets",
-    "copy:assets": "mkdir -p dist/player dist/renderer && cp src/player/player*.html dist/player/ && cp src/player/player*.js dist/player/ && cp src/renderer/index.html dist/renderer/ && cp src/renderer/styles.css dist/renderer/ && cp src/renderer/renderer.js dist/renderer/",
+    "copy:assets": "copyfiles -u 2 \"src/player/player*.html\" \"src/player/player*.js\" dist/player && copyfiles -u 2 \"src/renderer/index.html\" \"src/renderer/styles.css\" \"src/renderer/renderer.js\" dist/renderer",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder"
   },
@@ -16,10 +16,16 @@
     "files": [
       "dist/**/*"
     ],
+    "asar": true,
+    "asarUnpack": [
+      "dist/renderer/**/*",
+      "dist/player/**/*"
+    ],
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "signAndEditExecutable": false
     },
     "mac": {
       "target": [
@@ -37,8 +43,9 @@
   "keywords": [],
   "license": "ISC",
   "devDependencies": {
-    "electron": "^39.2.7",
     "@types/node": "^25.0.9",
+    "copyfiles": "^2.4.1",
+    "electron": "^39.2.7",
     "electron-builder": "^26.4.0",
     "typescript": "^5.9.3"
   }
