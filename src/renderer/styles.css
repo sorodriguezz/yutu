@@ -728,6 +728,9 @@ body {
 }
 
 .queue-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -810,18 +813,56 @@ body {
   cursor: pointer;
   padding: 4px 8px;
   font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.2s, color 0.2s;
+  transition: color 0.2s;
   border-radius: 4px;
-}
-
-.queue-item:hover .remove-btn {
-  opacity: 1;
 }
 
 .remove-btn:hover {
   color: #ff4444;
   background: rgba(255, 68, 68, 0.1);
+}
+
+/* Copy link button in queue */
+.copy-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.2s;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-link-btn:hover {
+  color: var(--accent);
+  background: rgba(29, 185, 84, 0.1);
+}
+
+/* Toast notification */
+.toast-notification {
+  position: fixed;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-elevated);
+  color: var(--text-base);
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 9999;
+  border: 1px solid var(--border-subtle);
+}
+
+.toast-notification.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ===== PLAYER BAR ===== */

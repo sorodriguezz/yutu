@@ -8,6 +8,8 @@ let queue: any[] = [];
 let queueIndex = -1;
 let shuffle = false;
 let repeat: "off" | "all" | "one" = "off";
+let isMuted = false;
+let volumeBeforeMute = 60;
 
 const el = {
   newPlaylistName: document.getElementById("newPlaylistName") as HTMLInputElement,
@@ -38,11 +40,27 @@ const el = {
   btnSaveTheme: document.getElementById("btnSaveTheme") as HTMLButtonElement,
 
   btnExportPlaylist: document.getElementById("btnExportPlaylist") as HTMLButtonElement,
-  btnImportPlaylist: document.getElementById("btnImportPlaylist") as HTMLButtonElement
+  btnImportPlaylist: document.getElementById("btnImportPlaylist") as HTMLButtonElement,
+
+  btnMute: document.getElementById("btnMute") as HTMLButtonElement,
+  volumeIcon: document.getElementById("volumeIcon") as unknown as SVGElement,
+  muteIcon: document.getElementById("muteIcon") as unknown as SVGElement
 };
 
 function setAccent(color: string) {
   document.documentElement.style.setProperty("--accent", color);
+}
+
+function updateMuteUI() {
+  if (isMuted) {
+    el.volumeIcon.style.display = "none";
+    el.muteIcon.style.display = "block";
+    el.btnMute.title = "Activar sonido";
+  } else {
+    el.volumeIcon.style.display = "block";
+    el.muteIcon.style.display = "none";
+    el.btnMute.title = "Silenciar";
+  }
 }
 
 function fmtTime(sec: number) {
@@ -205,6 +223,28 @@ function bindUI() {
     const v = Number(el.volume.value);
     await window.api.player.setVolume(v);
     await window.api.settings.setVolumeDefault(v);
+    
+    // Si cambiamos el volumen manualmente, desactivar mute
+    if (isMuted && v > 0) {
+      isMuted = false;
+      updateMuteUI();
+    }
+  });
+
+  el.btnMute.addEventListener("click", async () => {
+    if (isMuted) {
+      // Unmute: restaurar volumen anterior
+      isMuted = false;
+      el.volume.value = String(volumeBeforeMute);
+      await window.api.player.setVolume(volumeBeforeMute);
+    } else {
+      // Mute: guardar volumen actual y poner en 0
+      volumeBeforeMute = Number(el.volume.value) || 60;
+      isMuted = true;
+      el.volume.value = "0";
+      await window.api.player.setVolume(0);
+    }
+    updateMuteUI();
   });
 
   el.btnSaveTheme.addEventListener("click", async () => {

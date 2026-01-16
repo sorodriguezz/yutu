@@ -10,6 +10,10 @@ let state = {
   viewMode: 'queue' // 'queue' or 'playlist'
 };
 
+// Mute state
+let isMuted = false;
+let volumeBeforeMute = 60;
+
 // Track last queue state to avoid unnecessary re-renders
 let lastQueueHash = '';
 function getQueueHash(queue) {
@@ -206,6 +210,46 @@ window.removeFromQueue = async function(index) {
   }
 };
 
+// Copy YouTube link to clipboard
+window.copyYoutubeLink = async function(videoId) {
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    // Mostrar feedback visual temporal
+    showToast('Link copiado al portapapeles');
+  } catch (err) {
+    // Fallback para navegadores que no soportan clipboard API
+    const textArea = document.createElement('textarea');
+    textArea.value = url;
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    showToast('Link copiado al portapapeles');
+  }
+};
+
+// Show toast notification
+function showToast(message) {
+  // Remover toast existente si hay uno
+  const existingToast = document.querySelector('.toast-notification');
+  if (existingToast) existingToast.remove();
+  
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  // Animar entrada
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // Remover después de 2 segundos
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}
+
 // Remove track from playlist
 window.removeFromPlaylist = async function(playlistId, trackId) {
   try {
@@ -381,6 +425,26 @@ function initializeSettingsUI() {
   if (volumeDefaultLabel) {
     volumeDefaultLabel.textContent = state.settings.volumeDefault;
   }
+  
+  // Inicializar el slider de volumen del reproductor con el valor guardado
+  const volumeSlider = document.getElementById('volume');
+  const volumeLabel = document.getElementById('volumeLabel');
+  const savedVolume = state.settings.volumeDefault;
+  
+  if (volumeSlider) {
+    volumeSlider.value = savedVolume;
+    updateSliderBackground(volumeSlider, savedVolume, 100);
+  }
+  
+  if (volumeLabel) {
+    volumeLabel.textContent = savedVolume;
+  }
+  
+  // Enviar el volumen al player
+  window.api.setVolume(savedVolume);
+  
+  // Actualizar volumeBeforeMute con el valor guardado
+  volumeBeforeMute = savedVolume;
 }
 
 // === EVENT LISTENERS ===
@@ -441,9 +505,46 @@ function setupEventListeners() {
       if (volumeLabel) volumeLabel.textContent = vol;
       updateSliderBackground(volumeSlider, vol, 100);
       window.api.setVolume(vol);
+      
+      // Si cambiamos el volumen manualmente, desactivar mute
+      if (isMuted && vol > 0) {
+        isMuted = false;
+        updateMuteUI();
+      }
     };
-    // Initialize volume slider background
-    updateSliderBackground(volumeSlider, 60, 100);
+    // Initialize volume slider background (will be updated by initializeSettingsUI)
+    updateSliderBackground(volumeSlider, state.settings.volumeDefault, 100);
+  }
+
+  // Mute button
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.onclick = () => {
+      const volumeSlider = document.getElementById('volume');
+      const volumeLabel = document.getElementById('volumeLabel');
+      
+      if (isMuted) {
+        // Unmute: restaurar volumen anterior
+        isMuted = false;
+        if (volumeSlider) {
+          volumeSlider.value = volumeBeforeMute;
+          updateSliderBackground(volumeSlider, volumeBeforeMute, 100);
+        }
+        if (volumeLabel) volumeLabel.textContent = volumeBeforeMute;
+        window.api.setVolume(volumeBeforeMute);
+      } else {
+        // Mute: guardar volumen actual y poner en 0
+        volumeBeforeMute = volumeSlider ? parseInt(volumeSlider.value) : 60;
+        isMuted = true;
+        if (volumeSlider) {
+          volumeSlider.value = 0;
+          updateSliderBackground(volumeSlider, 0, 100);
+        }
+        if (volumeLabel) volumeLabel.textContent = '0';
+        window.api.setVolume(0);
+      }
+      updateMuteUI();
+    };
   }
 
   // Progress/Seek
@@ -640,6 +741,25 @@ function updateSliderBackground(slider, value, max) {
   slider.style.background = `linear-gradient(to right, var(--accent) ${percent}%, var(--border-subtle) ${percent}%)`;
 }
 
+// === MUTE UI UPDATE ===
+function updateMuteUI() {
+  const volumeIcon = document.getElementById('volumeIcon');
+  const muteIcon = document.getElementById('muteIcon');
+  const btnMute = document.getElementById('btnMute');
+  
+  if (volumeIcon && muteIcon) {
+    if (isMuted) {
+      volumeIcon.style.display = 'none';
+      muteIcon.style.display = 'block';
+      if (btnMute) btnMute.title = 'Activar sonido';
+    } else {
+      volumeIcon.style.display = 'block';
+      muteIcon.style.display = 'none';
+      if (btnMute) btnMute.title = 'Silenciar';
+    }
+  }
+}
+
 // === RENDER ===
 function render() {
   renderPlaylists();
@@ -781,6 +901,12 @@ function renderQueue() {
           <div class="queue-item-meta">${escapeHtml(displayAuthor)}</div>
         </div>
         <div class="queue-item-actions">
+          <button class="copy-link-btn" onclick="event.stopPropagation(); copyYoutubeLink('${track.videoId}')" title="Copiar link de YouTube">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
           ${state.playlists.length > 0 ? `
             <select class="add-to-playlist-select" data-track-index="${i}" onclick="event.stopPropagation();">
               <option value="">+ Playlist</option>
