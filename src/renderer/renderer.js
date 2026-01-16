@@ -1028,14 +1028,31 @@ function updateNowPlaying() {
 function updatePlayerBarInfo() {
   const nameEl = document.getElementById('playerTrackName');
   const metaEl = document.getElementById('playerTrackMeta');
+  const thumbImg = document.getElementById('playerThumbImg');
+  const thumbIcon = document.getElementById('playerThumbIcon');
 
   if (state.queue.currentIndex >= 0 && state.queue.items[state.queue.currentIndex]) {
     const track = state.queue.items[state.queue.currentIndex];
     if (nameEl) nameEl.textContent = track.title || track.videoId;
     if (metaEl) metaEl.textContent = track.author || 'YouTube';
+    
+    // Mostrar thumbnail si está disponible
+    if (track.thumbnail || track.videoId) {
+      const thumbnailUrl = track.thumbnail || `https://img.youtube.com/vi/${track.videoId}/mqdefault.jpg`;
+      if (thumbImg) {
+        thumbImg.src = thumbnailUrl;
+        thumbImg.style.display = 'block';
+      }
+      if (thumbIcon) thumbIcon.style.display = 'none';
+    } else {
+      if (thumbImg) thumbImg.style.display = 'none';
+      if (thumbIcon) thumbIcon.style.display = 'block';
+    }
   } else {
     if (nameEl) nameEl.textContent = 'Sin reproducción';
     if (metaEl) metaEl.textContent = 'Agrega videos para comenzar';
+    if (thumbImg) thumbImg.style.display = 'none';
+    if (thumbIcon) thumbIcon.style.display = 'block';
   }
 }
 
