@@ -68,7 +68,7 @@ La interfaz incluye:
 
 ```bash
 # Clonar repositorio
-git clone <repo-url>
+git clone https://github.com/sorodriguezz/yutu.git
 cd yutu
 
 # Instalar dependencias
@@ -188,7 +188,3 @@ Genera instaladores para:
 - 📌 Mini player / Tray icon
 - 🔄 Auto-actualización
 
----
-
-**YT Local Player** v1.0  
-Playlists locales • Control total • Compatible con YouTube Premium
