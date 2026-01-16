@@ -21,23 +21,33 @@
       "dist/renderer/**/*",
       "dist/player/**/*"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sorodriguezz",
+        "repo": "yutu"
+      }
+    ],
     "win": {
       "target": [
         "nsis"
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "publisherName": "Sebastian Rodriguez"
     },
     "mac": {
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "category": "public.app-category.music"
     },
     "linux": {
       "target": [
         "AppImage",
         "deb"
-      ]
+      ],
+      "category": "Audio"
     }
   },
   "keywords": [],
@@ -48,5 +58,8 @@
     "electron": "^39.2.7",
     "electron-builder": "^26.4.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.7.3"
   }
 }

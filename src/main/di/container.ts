@@ -31,6 +31,10 @@ import { CycleRepeat } from "../../core/application/usecases/playback/CycleRepea
 
 import { UpdateAccentColor } from "../../core/application/usecases/settings/UpdateAccentColor";
 import { UpdateVolumeDefault } from "../../core/application/usecases/settings/UpdateVolumeDefault";
+import { UpdateYouTubeApiKey } from "../../core/application/usecases/settings/UpdateYouTubeApiKey";
+import { SearchYouTube } from "../../core/application/usecases/playback/SearchYouTube";
+
+import { YouTubeSearchAdapter } from "../infra/youtube/youtubeSearchAdapter";
 
 export type AppContainer = ReturnType<typeof buildContainer>;
 
@@ -43,13 +47,16 @@ export function buildContainer(opts: {
   const dbFile = path.join(app.getPath("userData"), "db.json");
   const db = new JsonDb(dbFile, {
     playlists: [],
-    settings: { accentColor: "#4f46e5", volumeDefault: 60 }
+    settings: { accentColor: "#4f46e5", volumeDefault: 60, youtubeApiKey: "" }
   });
 
   const playlistRepo = new PlaylistRepositoryJson(db);
   const settingsRepo = new SettingsRepositoryJson(db);
   const fileDialog = new ElectronFileDialog(opts.getWindow);
   const player = new ElectronYouTubePlayer(opts.playerView.webContents);
+  
+  // YouTube search adapter will be initialized with API key from settings
+  const youtubeSearch = new YouTubeSearchAdapter(""); // Will be updated via setApiKey
 
   const queue = new QueueService();
 
@@ -81,14 +88,16 @@ export function buildContainer(opts: {
       seek: new Seek(player),
       setVolume: new SetVolume(player),
       toggleShuffle: new ToggleShuffle(queue),
-      cycleRepeat: new CycleRepeat(queue)
+      cycleRepeat: new CycleRepeat(queue),
+      searchYouTube: new SearchYouTube(youtubeSearch)
     },
     settings: {
       setAccent: new UpdateAccentColor(settingsRepo),
-      setVolumeDefault: new UpdateVolumeDefault(settingsRepo)
+      setVolumeDefault: new UpdateVolumeDefault(settingsRepo),
+      setYouTubeApiKey: new UpdateYouTubeApiKey(settingsRepo)
     },
-    ports: { logger }
+    ports: { logger, youtubeSearch }
   };
 
-  return { uc, playlistRepo, settingsRepo, queue, player, fileDialog, logger };
+  return { uc, playlistRepo, settingsRepo, queue, player, fileDialog, logger, youtubeSearch };
 }

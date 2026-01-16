@@ -4,12 +4,18 @@ import http from "node:http";
 import fs from "node:fs";
 import { buildContainer } from "./di/container";
 import { registerIpc } from "./ipc/registerIpc";
+import { MediaKeysAdapter } from "./infra/system/mediaKeysAdapter";
+import { TrayIconAdapter } from "./infra/system/trayIconAdapter";
+import { AutoUpdaterAdapter } from "./infra/system/autoUpdaterAdapter";
 import { URL } from "url";
 
 let mainWindow: BrowserWindow | null = null;
 let playerView: WebContentsView | null = null;
 let httpServer: http.Server | null = null;
 let videoVisible = false; // Start with video visible so it can play
+let mediaKeys: MediaKeysAdapter | null = null;
+let trayIcon: TrayIconAdapter | null = null;
+let autoUpdater: AutoUpdaterAdapter | null = null;
 
 // Create simple HTTP server for player
 function createPlayerServer() {
@@ -133,6 +139,18 @@ function createWindow() {
     playerView
   });
 
+  // Register media keys
+  mediaKeys = new MediaKeysAdapter(container);
+  mediaKeys.register();
+
+  // Create tray icon
+  trayIcon = new TrayIconAdapter(container, () => mainWindow);
+  trayIcon.create();
+
+  // Setup auto-updater
+  autoUpdater = new AutoUpdaterAdapter(container.logger, () => mainWindow);
+  autoUpdater.checkForUpdatesOnStartup(5000);
+
   registerIpc(() => mainWindow, container, () => playerView, () => {
     videoVisible = !videoVisible;
     resizePlayer();
@@ -149,6 +167,18 @@ app.on("activate", () => {
 });
 
 app.on("window-all-closed", () => {
+  // Destroy tray icon
+  if (trayIcon) {
+    trayIcon.destroy();
+    trayIcon = null;
+  }
+  
+  // Unregister media keys
+  if (mediaKeys) {
+    mediaKeys.unregisterAll();
+    mediaKeys = null;
+  }
+  
   // Close HTTP server
   if (httpServer) {
     httpServer.close(() => {
@@ -162,6 +192,18 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  // Destroy tray icon
+  if (trayIcon) {
+    trayIcon.destroy();
+    trayIcon = null;
+  }
+  
+  // Unregister media keys
+  if (mediaKeys) {
+    mediaKeys.unregisterAll();
+    mediaKeys = null;
+  }
+  
   // Ensure HTTP server is closed
   if (httpServer) {
     httpServer.close();

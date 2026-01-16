@@ -16,6 +16,8 @@ export const Channels = {
   Queue_ToggleShuffle: "queue:toggleShuffle",
   Queue_CycleRepeat: "queue:cycleRepeat",
 
+  YouTube_Search: "youtube:search",
+
   Player_Play: "player:play",
   Player_Pause: "player:pause",
   Player_Seek: "player:seek",
@@ -23,6 +25,7 @@ export const Channels = {
 
   Settings_SetAccent: "settings:setAccent",
   Settings_SetVolumeDefault: "settings:setVolumeDefault",
+  Settings_SetYouTubeApiKey: "settings:setYouTubeApiKey",
 
   Util_ParseVideoId: "util:parseVideoId",
 

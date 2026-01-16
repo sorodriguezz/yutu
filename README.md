@@ -57,6 +57,17 @@
 - Layout con sidebar + área principal + barra de reproductor
 - Notificaciones toast para feedback visual
 
+### 🔍 Búsqueda y Visualización
+- **Búsqueda integrada en YouTube**: Busca videos directamente desde la app
+- **Thumbnails de videos**: Vista previa visual de todas las canciones
+- Información completa de cada video (título, autor, duración)
+
+### ⌨️ Funciones del Sistema
+- **Media keys del teclado**: Control con teclas multimedia del teclado
+- **Tray icon**: Icono en bandeja del sistema con menú contextual
+- **Mini player**: Control desde el menú de la bandeja
+- **Auto-actualización**: Actualizaciones automáticas de la aplicación
+
 ## Capturas de pantalla
 
 La interfaz incluye:
@@ -180,11 +191,42 @@ Genera instaladores para:
 - 🍎 **macOS** - DMG + ZIP (Apple Silicon compatible)
 - 🐧 **Linux** - AppImage + deb
 
-## Próximas mejoras
+## Configuración adicional
 
-- 🔍 Búsqueda integrada en YouTube
-- 🖼️ Thumbnails de videos
-- ⌨️ Soporte para media keys del teclado
-- 📌 Mini player / Tray icon
-- 🔄 Auto-actualización
+### API de YouTube (Opcional)
+
+Para habilitar la búsqueda de videos, configura tu API key de YouTube:
+
+**Desde la aplicación (Recomendado):**
+1. Abre Configuración (⚙️)
+2. En "YouTube API Key", haz clic en "¿Cómo obtener una API Key?"
+3. Sigue los pasos para crear una API Key en Google Cloud Console
+4. Pega tu API Key y haz clic en "Guardar"
+
+**Pasos detallados para obtener API Key:**
+1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
+2. Crea un proyecto nuevo o selecciona uno existente
+3. Habilita **YouTube Data API v3** en la biblioteca de APIs
+4. Ve a **Credenciales** → **Crear credenciales** → **Clave de API**
+5. Copia la clave generada y guárdala en la app
+
+**Alternativamente con variable de entorno:**
+   ```bash
+   # Windows
+   set YOUTUBE_API_KEY=tu_api_key_aqui
+   
+   # macOS/Linux
+   export YOUTUBE_API_KEY=tu_api_key_aqui
+   ```
+
+**Nota:** Sin API key, la búsqueda no estará disponible pero puedes seguir agregando videos mediante URL directa.
+
+## Características implementadas
+
+✅ **Búsqueda integrada en YouTube** - Busca videos sin salir de la app  
+✅ **Thumbnails de videos** - Vista previa de todas las canciones  
+✅ **Media keys del teclado** - Control con teclas multimedia  
+✅ **Tray icon y mini player** - Control desde la bandeja del sistema  
+✅ **Auto-actualización** - Actualizaciones automáticas de la app
+
 

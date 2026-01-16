@@ -49,8 +49,9 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
             </svg>
-            <input id="ytInput" type="text" placeholder="Pega una URL de YouTube o Video ID" />
-            <button id="btnAddToQueue" class="btn-primary" onclick="addToQueue()">Agregar</button>
+            <input id="ytInput" type="text" placeholder="Buscar en YouTube o pegar URL..." onkeydown="if(event.key==='Enter') event.preventDefault()" />
+            <button id="btnSearch" class="btn-primary" onclick="searchYouTube()">Buscar</button>
+            <button id="btnAddToQueue" class="btn-primary" onclick="addToQueue()">Agregar URL</button>
           </div>
           <div class="top-actions">
             <button id="btnToggleVideo" class="btn-icon" title="Mostrar/Ocultar video">
@@ -66,6 +67,20 @@
               </svg>
             </button>
           </div>
+        </div>
+
+        <!-- Search Results (initially hidden) -->
+        <div id="searchResults" class="search-results hidden">
+          <div class="search-results-header">
+            <h3>Resultados de búsqueda</h3>
+            <button class="btn-icon-close" onclick="closeSearchResults()" title="Cerrar">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div id="searchResultsContent" class="search-results-content"></div>
         </div>
 
         <!-- Settings Panel (hidden by default) -->
@@ -95,6 +110,38 @@
                 <span id="volumeDefaultLabel">60</span>
               </div>
             </div>
+            <div class="setting-item setting-item-full">
+              <div class="setting-label">
+                <span class="setting-title">YouTube API Key</span>
+                <span class="setting-desc">Habilita la búsqueda de videos en YouTube</span>
+              </div>
+              <div class="api-key-container">
+                <div class="api-key-input-wrapper">
+                  <input id="youtubeApiKey" type="password" placeholder="Pega aquí tu YouTube Data API v3 Key" class="input-api-key" />
+                  <button class="btn-icon-toggle" onclick="toggleApiKeyVisibility()" title="Mostrar/Ocultar clave">
+                    <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <svg id="eyeOffIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                      <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                  </button>
+                </div>
+                <button class="btn-save-api" onclick="saveYouTubeApiKey()">
+                  Guardar
+                </button>
+              </div>
+              <div class="api-key-help-modern">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                <a href="#" onclick="event.preventDefault(); showApiKeyHelp()">¿Cómo obtener?</a>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -112,6 +159,89 @@
             </div>
             <div class="modal-footer">
               <button class="btn-secondary" onclick="closeAddToPlaylistModal()">No, gracias</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- API Key Help Modal -->
+        <div id="apiKeyHelpModal" class="modal hidden">
+          <div class="modal-content modal-api-help">
+            <div class="modal-header">
+              <div class="modal-title-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                <h3>Obtener YouTube API Key</h3>
+              </div>
+              <button class="modal-close" onclick="closeApiKeyHelpModal()">✕</button>
+            </div>
+            <div class="modal-body api-key-help">
+              <div class="help-intro">
+                <p>Obtén tu API Key en 5 pasos:</p>
+              </div>
+              
+              <div class="stepper-horizontal">
+                <div class="step-card">
+                  <div class="step-icon">1</div>
+                  <div class="step-info">
+                    <h4>Cloud Console</h4>
+                    <a href="https://console.cloud.google.com/" target="_blank">Acceder →</a>
+                  </div>
+                </div>
+                
+                <div class="step-arrow">→</div>
+                
+                <div class="step-card">
+                  <div class="step-icon">2</div>
+                  <div class="step-info">
+                    <h4>Proyecto</h4>
+                    <p>Crear o seleccionar</p>
+                  </div>
+                </div>
+                
+                <div class="step-arrow">→</div>
+                
+                <div class="step-card">
+                  <div class="step-icon">3</div>
+                  <div class="step-info">
+                    <h4>Habilitar API</h4>
+                    <p>YouTube Data v3</p>
+                  </div>
+                </div>
+                
+                <div class="step-arrow">→</div>
+                
+                <div class="step-card">
+                  <div class="step-icon">4</div>
+                  <div class="step-info">
+                    <h4>Credenciales</h4>
+                    <p>Crear API Key</p>
+                  </div>
+                </div>
+                
+                <div class="step-arrow">→</div>
+                
+                <div class="step-card">
+                  <div class="step-icon">5</div>
+                  <div class="step-info">
+                    <h4>Copiar</h4>
+                    <p>Pegar arriba</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="api-key-note">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <span><strong>Nota:</strong> Sin API Key puedes agregar videos por URL directa</span>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-primary" onclick="closeApiKeyHelpModal()">Entendido</button>
             </div>
           </div>
         </div>

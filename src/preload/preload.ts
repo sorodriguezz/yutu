@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('api', {
   toggleShuffle: () => ipcRenderer.invoke('queue:toggleShuffle'),
   cycleRepeat: () => ipcRenderer.invoke('queue:cycleRepeat'),
 
+  // YouTube Search
+  searchYouTube: (query: string) => ipcRenderer.invoke('youtube:search', query),
+
   // Playlists
   createPlaylist: (name: string) => ipcRenderer.invoke('playlist:create', name),
   deletePlaylist: (id: string) => ipcRenderer.invoke('playlist:delete', id),
@@ -32,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
   // Settings
   setAccentColor: (color: string) => ipcRenderer.invoke('settings:setAccent', color),
   setVolumeDefault: (volume: number) => ipcRenderer.invoke('settings:setVolumeDefault', volume),
+  setYouTubeApiKey: (apiKey: string) => ipcRenderer.invoke('settings:setYouTubeApiKey', apiKey),
 
   // Video visibility
   toggleVideo: (visible: boolean) => ipcRenderer.invoke('player:toggleVideo', visible),

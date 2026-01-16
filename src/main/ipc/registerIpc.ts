@@ -12,6 +12,18 @@ export function registerIpc(
   // Track player state
   let isPlaying = false;
 
+  // Initialize YouTube search with saved API key
+  (async () => {
+    try {
+      const settings = await c.settingsRepo.get();
+      if (settings.youtubeApiKey) {
+        c.youtubeSearch.setApiKey(settings.youtubeApiKey);
+      }
+    } catch (error) {
+      console.error('Error loading YouTube API key from settings:', error);
+    }
+  })();
+
   // App state
   ipcMain.handle('app:getState', async () => c.uc.app.getState());
 
@@ -40,11 +52,23 @@ export function registerIpc(
   ipcMain.handle('queue:enqueueTrack', async (_e, urlOrId: string) => {
     const videoId = parseVideoId(urlOrId);
     if (!videoId) throw new Error('URL o VideoId inválido');
+    
+    // Get video info from YouTube
+    let videoInfo;
+    try {
+      videoInfo = await c.youtubeSearch.getVideoInfo(videoId);
+    } catch (error) {
+      console.warn('Could not fetch video info:', error);
+    }
+    
     const track = {
       id: crypto.randomUUID(),
       provider: 'youtube' as const,
       videoId,
-      title: videoId,
+      title: videoInfo?.title || videoId,
+      author: videoInfo?.author,
+      thumbnail: videoInfo?.thumbnail || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+      duration: videoInfo?.duration,
       addedAt: Date.now()
     };
     return c.uc.playback.enqueueTrack.execute(track);
@@ -109,6 +133,16 @@ export function registerIpc(
   
   ipcMain.handle('settings:setVolumeDefault', async (_e, vol: number) => 
     c.uc.settings.setVolumeDefault.execute(vol));
+
+  ipcMain.handle('settings:setYouTubeApiKey', async (_e, apiKey: string) => {
+    await c.uc.settings.setYouTubeApiKey.execute(apiKey);
+    // Update the YouTube search adapter with the new API key
+    c.youtubeSearch.setApiKey(apiKey);
+  });
+
+  // YouTube Search
+  ipcMain.handle('youtube:search', async (_e, query: string) => 
+    c.uc.playback.searchYouTube.execute(query));
 
   // Video visibility toggle
   ipcMain.handle('player:toggleVideo', async (_e, visible: boolean) => {

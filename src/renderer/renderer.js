@@ -14,6 +14,38 @@ let state = {
 let isMuted = false;
 let volumeBeforeMute = 60;
 
+// === HELPER: CALCULATE LUMINANCE AND CONTRAST ===
+function getLuminance(hex) {
+  // Convert hex to RGB
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 0xff;
+  const g = (rgb >> 8) & 0xff;
+  const b = (rgb >> 0) & 0xff;
+  
+  // Convert to relative luminance
+  const rsRGB = r / 255;
+  const gsRGB = g / 255;
+  const bsRGB = b / 255;
+  
+  const rLinear = rsRGB <= 0.03928 ? rsRGB / 12.92 : Math.pow((rsRGB + 0.055) / 1.055, 2.4);
+  const gLinear = gsRGB <= 0.03928 ? gsRGB / 12.92 : Math.pow((gsRGB + 0.055) / 1.055, 2.4);
+  const bLinear = bsRGB <= 0.03928 ? bsRGB / 12.92 : Math.pow((bsRGB + 0.055) / 1.055, 2.4);
+  
+  return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+}
+
+function getContrastTextColor(backgroundColor) {
+  const luminance = getLuminance(backgroundColor);
+  // If luminance > 0.5, color is light, use black text
+  // Otherwise use white text
+  return luminance > 0.5 ? '#000000' : '#ffffff';
+}
+
+function updateAccentTextColor(accentColor) {
+  const textColor = getContrastTextColor(accentColor);
+  document.documentElement.style.setProperty('--accent-text', textColor);
+}
+
 // Track last queue state to avoid unnecessary re-renders
 let lastQueueHash = '';
 function getQueueHash(queue) {
@@ -128,8 +160,9 @@ window.createPlaylist = async function() {
     input.value = '';
     await loadState();
     render();
+    showToast('✅ Playlist creada');
   } catch (err) {
-    alert('Error al crear playlist: ' + err.message);
+    showToast('❌ Error al crear playlist: ' + err.message);
   }
 };
 
@@ -138,27 +171,31 @@ window.importPlaylist = async function() {
     await window.api.importPlaylist();
     await loadState();
     render();
+    showToast('✅ Playlist importada');
   } catch (err) {
-    alert('Error al importar: ' + err.message);
+    showToast('❌ Error al importar: ' + err.message);
   }
 };
 
 window.deletePlaylist = async function(id) {
-  if (!confirm('¿Eliminar esta playlist?')) return;
-  try {
-    await window.api.deletePlaylist(id);
-    await loadState();
-    render();
-  } catch (err) {
-    alert('Error al eliminar: ' + err.message);
-  }
+  showConfirm('¿Eliminar esta playlist?', async () => {
+    try {
+      await window.api.deletePlaylist(id);
+      await loadState();
+      render();
+      showToast('✅ Playlist eliminada');
+    } catch (err) {
+      showToast('❌ Error al eliminar: ' + err.message);
+    }
+  });
 };
 
 window.enqueuePlaylist = async function(id) {
   try {
     await window.api.enqueuePlaylist(id);
+    showToast('✅ Playlist agregada a la cola');
   } catch (err) {
-    alert('Error al encolar playlist: ' + err.message);
+    showToast('❌ Error al encolar playlist: ' + err.message);
   }
 };
 
@@ -206,7 +243,7 @@ window.removeFromQueue = async function(index) {
     updateNowPlaying();
     updatePlayerBarInfo();
   } catch (err) {
-    alert('Error al eliminar de la cola: ' + err.message);
+    showToast('❌ Error al eliminar de la cola: ' + err.message);
   }
 };
 
@@ -243,11 +280,52 @@ function showToast(message) {
   // Animar entrada
   setTimeout(() => toast.classList.add('show'), 10);
   
-  // Remover después de 2 segundos
+  // Remover después de 3 segundos
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
-  }, 2000);
+  }, 3000);
+}
+
+function showConfirm(message, onConfirm, onCancel) {
+  const existingConfirm = document.querySelector('.confirm-modal');
+  if (existingConfirm) existingConfirm.remove();
+  
+  const modal = document.createElement('div');
+  modal.className = 'modal confirm-modal';
+  modal.innerHTML = `
+    <div class="modal-content confirm-content">
+      <div class="confirm-icon">⚠️</div>
+      <div class="confirm-message">${message}</div>
+      <div class="confirm-actions">
+        <button class="btn-confirm-cancel">Cancelar</button>
+        <button class="btn-confirm-ok">Aceptar</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.remove('hidden'), 10);
+  
+  const btnCancel = modal.querySelector('.btn-confirm-cancel');
+  const btnOk = modal.querySelector('.btn-confirm-ok');
+  
+  btnCancel.onclick = () => {
+    modal.remove();
+    if (onCancel) onCancel();
+  };
+  
+  btnOk.onclick = () => {
+    modal.remove();
+    if (onConfirm) onConfirm();
+  };
+  
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      modal.remove();
+      if (onCancel) onCancel();
+    }
+  };
 }
 
 // Remove track from playlist
@@ -260,16 +338,18 @@ window.removeFromPlaylist = async function(playlistId, trackId) {
       state.selectedPlaylist = state.playlists.find(p => p.id === playlistId);
     }
     render();
+    showToast('✅ Canción eliminada de la playlist');
   } catch (err) {
-    alert('Error al eliminar de playlist: ' + err.message);
+    showToast('❌ Error al eliminar de playlist: ' + err.message);
   }
 };
 
 window.exportPlaylist = async function(id) {
   try {
     await window.api.exportPlaylist(id);
+    showToast('✅ Playlist exportada');
   } catch (err) {
-    alert('Error al exportar: ' + err.message);
+    showToast('❌ Error al exportar: ' + err.message);
   }
 };
 
@@ -284,8 +364,9 @@ window.addTrackToPlaylist = async function(trackIndex, playlistId) {
     });
     await loadState();
     render();
+    showToast('✅ Agregado a playlist');
   } catch (err) {
-    alert('Error al agregar a playlist: ' + err.message);
+    showToast('❌ Error al agregar a playlist: ' + err.message);
   }
 };
 
@@ -293,7 +374,7 @@ window.playAtIndex = async function(index) {
   try {
     await window.api.playAtIndex(index);
   } catch (err) {
-    alert('Error al reproducir: ' + err.message);
+    showToast('❌ Error al reproducir: ' + err.message);
   }
 };
 
@@ -354,8 +435,9 @@ window.addPendingTrackToPlaylist = async function(playlistId) {
     await loadState();
     render();
     closeAddToPlaylistModal();
+    showToast('✅ Agregado a playlist');
   } catch (err) {
-    alert('Error al agregar a playlist: ' + err.message);
+    showToast('❌ Error al agregar a playlist: ' + err.message);
   }
 };
 
@@ -396,6 +478,7 @@ async function loadState() {
     });
     
     document.documentElement.style.setProperty('--accent', state.settings.accentColor);
+    updateAccentTextColor(state.settings.accentColor);
     
     // Initialize settings UI with saved values
     initializeSettingsUI();
@@ -408,6 +491,7 @@ function initializeSettingsUI() {
   const volumeDefault = document.getElementById('volumeDefault');
   const volumeDefaultLabel = document.getElementById('volumeDefaultLabel');
   const colorPreview = document.getElementById('colorPreview');
+  const youtubeApiKey = document.getElementById('youtubeApiKey');
   
   if (accentColor) {
     accentColor.value = state.settings.accentColor;
@@ -424,6 +508,12 @@ function initializeSettingsUI() {
   
   if (volumeDefaultLabel) {
     volumeDefaultLabel.textContent = state.settings.volumeDefault;
+  }
+
+  // Initialize YouTube API Key field (show masked value if exists)
+  if (youtubeApiKey && state.settings.youtubeApiKey) {
+    youtubeApiKey.value = state.settings.youtubeApiKey;
+    youtubeApiKey.placeholder = '••••••••••••••••••••••••';
   }
   
   // Inicializar el slider de volumen del reproductor con el valor guardado
@@ -566,6 +656,7 @@ function setupEventListeners() {
     accentColor.onchange = async (e) => {
       const color = e.target.value;
       document.documentElement.style.setProperty('--accent', color);
+      updateAccentTextColor(color);
       const colorPreview = document.getElementById('colorPreview');
       if (colorPreview) colorPreview.style.background = color;
       await window.api.setAccentColor(color);
@@ -643,13 +734,13 @@ async function toggleVideo() {
 window.addToQueue = async function() {
   const input = document.getElementById('ytInput');
   if (!input) {
-    alert('No se encontró el campo de búsqueda');
+    showToast('❌ No se encontró el campo de búsqueda');
     return;
   }
   
   const value = input.value.trim();
   if (!value) {
-    alert('Por favor ingresa una URL o ID de video');
+    showToast('⚠️ Por favor ingresa una URL o ID de video');
     return;
   }
 
@@ -681,7 +772,7 @@ window.addToQueue = async function() {
       }
     }, 500);
   } catch (err) {
-    alert('Error al agregar: ' + err.message);
+    showToast('❌ Error al agregar: ' + err.message);
   }
 };
 
@@ -985,4 +1076,110 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// === YOUTUBE SEARCH ===
+async function searchYouTube() {
+  const input = document.getElementById('ytInput');
+  const query = input.value.trim();
+  
+  if (!query) {
+    showToast('⚠️ Ingresa un término de búsqueda');
+    return;
+  }
+  
+  // Show loading state
+  const resultsDiv = document.getElementById('searchResults');
+  const contentDiv = document.getElementById('searchResultsContent');
+  resultsDiv.classList.remove('hidden');
+  contentDiv.innerHTML = '<div class="search-loading">Buscando en YouTube...</div>';
+  
+  try {
+    const results = await window.api.searchYouTube(query);
+    
+    if (!results || results.length === 0) {
+      contentDiv.innerHTML = '<div class="search-empty">No se encontraron resultados. <br><small>Configura YOUTUBE_API_KEY para habilitar búsqueda.</small></div>';
+      return;
+    }
+    
+    // Render results
+    contentDiv.innerHTML = results.map(result => `
+      <div class="search-result-item" onclick="addSearchResultToQueue('${result.videoId}')">
+        <img src="${result.thumbnail}" alt="${escapeHtml(result.title)}" class="search-result-thumb">
+        <div class="search-result-info">
+          <div class="search-result-title">${escapeHtml(result.title)}</div>
+          <div class="search-result-author">${escapeHtml(result.author)}</div>
+          ${result.duration > 0 ? `<div class="search-result-duration">${formatTime(result.duration)}</div>` : ''}
+        </div>
+        <button class="btn-icon search-result-add" onclick="event.stopPropagation(); addSearchResultToQueue('${result.videoId}')" title="Agregar a la cola">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    `).join('');
+    
+  } catch (error) {
+    console.error('Error searching YouTube:', error);
+    contentDiv.innerHTML = '<div class="search-error">Error al buscar. Intenta nuevamente.</div>';
+    showToast('❌ Error al buscar en YouTube');
+  }
+}
+
+async function addSearchResultToQueue(videoId) {
+  try {
+    await window.api.enqueueTrack(videoId);
+    showToast('✅ Agregado a la cola');
+    closeSearchResults();
+  } catch (error) {
+    console.error('Error adding to queue:', error);
+    showToast('❌ Error al agregar a la cola');
+  }
+}
+
+function closeSearchResults() {
+  const resultsDiv = document.getElementById('searchResults');
+  resultsDiv.classList.add('hidden');
+  document.getElementById('ytInput').value = '';
+}
+
+// === YOUTUBE API KEY CONFIGURATION ===
+async function saveYouTubeApiKey() {
+  const input = document.getElementById('youtubeApiKey');
+  const apiKey = input.value.trim();
+  
+  try {
+    await window.api.setYouTubeApiKey(apiKey);
+    showToast('✅ API Key guardada correctamente');
+  } catch (error) {
+    console.error('Error saving API key:', error);
+    showToast('❌ Error al guardar API Key');
+  }
+}
+
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('youtubeApiKey');
+  const eyeIcon = document.getElementById('eyeIcon');
+  const eyeOffIcon = document.getElementById('eyeOffIcon');
+  
+  if (input.type === 'password') {
+    input.type = 'text';
+    eyeIcon.style.display = 'none';
+    eyeOffIcon.style.display = 'block';
+  } else {
+    input.type = 'password';
+    eyeIcon.style.display = 'block';
+    eyeOffIcon.style.display = 'none';
+  }
+}
+
+function showApiKeyHelp() {
+  const modal = document.getElementById('apiKeyHelpModal');
+  modal.classList.remove('hidden');
+}
+
+function closeApiKeyHelpModal() {
+  const modal = document.getElementById('apiKeyHelpModal');
+  modal.classList.add('hidden');
 }
