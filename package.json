@@ -1,0 +1,47 @@
+{
+  "name": "yutu",
+  "author": "sorodriguezz",
+  "version": "1.0.0",
+  "description": "Aplicación para reproducir musica desde youtube",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc && npm run copy:assets",
+    "copy:assets": "mkdir -p dist/player dist/renderer && cp src/player/player*.html dist/player/ && cp src/player/player*.js dist/player/ && cp src/renderer/index.html dist/renderer/ && cp src/renderer/styles.css dist/renderer/ && cp src/renderer/renderer.js dist/renderer/",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.sebastian.ytlocalplayer",
+    "productName": "YT Local Player",
+    "files": [
+      "dist/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  },
+  "keywords": [],
+  "license": "ISC",
+  "dependencies": {
+    "electron": "^39.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "electron-builder": "^26.4.0",
+    "typescript": "^5.9.3"
+  }
+}

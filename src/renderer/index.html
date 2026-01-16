@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>YT Local Player</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1 class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+            </svg>
+            YT Player
+          </h1>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-header">
+            <h2>Tu Biblioteca</h2>
+            <button id="btnCreatePlaylist" class="btn-icon" title="Crear playlist" onclick="createPlaylist()">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1.5a.5.5 0 0 1 .5.5v6h6a.5.5 0 0 1 0 1h-6v6a.5.5 0 0 1-1 0v-6h-6a.5.5 0 0 1 0-1h6v-6a.5.5 0 0 1 .5-.5z"/>
+              </svg>
+            </button>
+          </div>
+          <input id="newPlaylistName" class="input-minimal" placeholder="Nueva playlist..." onkeypress="if(event.key==='Enter') createPlaylist()" />
+          <div id="playlistList" class="playlist-list"></div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button id="btnImportPlaylist" class="btn-secondary" onclick="importPlaylist()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM4.5 7.5a.5.5 0 0 0 0 1h5.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H4.5z"/>
+            </svg>
+            Importar Playlist
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Top Bar -->
+        <div class="top-bar">
+          <div class="search-bar">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+            </svg>
+            <input id="ytInput" type="text" placeholder="Pega una URL de YouTube o Video ID" />
+            <button id="btnAddToQueue" class="btn-primary" onclick="addToQueue()">Agregar</button>
+          </div>
+          <div class="top-actions">
+            <button id="btnToggleVideo" class="btn-icon" title="Mostrar/Ocultar video">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+              </svg>
+            </button>
+            <button id="btnSettings" class="btn-icon" title="Configuración" onclick="toggleSettings()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Settings Panel (hidden by default) -->
+        <div id="settingsPanel" class="settings-panel hidden">
+          <div class="settings-content">
+            <div class="settings-header">
+              <h3>Configuración</h3>
+              <button class="settings-close" onclick="toggleSettings()">✕</button>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <span class="setting-title">Color de acento</span>
+                <span class="setting-desc">Personaliza el color de la interfaz</span>
+              </div>
+              <div class="color-picker-wrapper">
+                <input id="accentColor" type="color" />
+                <div id="colorPreview" class="color-preview"></div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <span class="setting-title">Volumen por defecto</span>
+                <span class="setting-desc">Volumen inicial al abrir la app</span>
+              </div>
+              <div class="setting-control">
+                <input id="volumeDefault" type="range" min="0" max="100" value="60" />
+                <span id="volumeDefaultLabel">60</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add to Playlist Modal -->
+        <div id="addToPlaylistModal" class="modal hidden">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>Canción agregada a la cola</h3>
+              <button class="modal-close" onclick="closeAddToPlaylistModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              <p id="addedTrackName" class="added-track-name"></p>
+              <p class="modal-question">¿Deseas agregarla también a una playlist?</p>
+              <div id="playlistOptions" class="playlist-options"></div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" onclick="closeAddToPlaylistModal()">No, gracias</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Now Playing -->
+        <div class="now-playing-section">
+          <div class="now-playing-art">
+            <div class="album-art">
+              <svg width="64" height="64" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                <path d="M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="now-playing-info">
+            <div class="track-title" id="nowTitle">Selecciona una canción</div>
+            <div class="track-artist" id="nowMeta">Agrega videos a la cola</div>
+          </div>
+        </div>
+
+        <!-- Queue Section -->
+        <div class="queue-section">
+          <div class="queue-header">
+            <h2>Cola de reproducción</h2>
+            <span id="queueCount" class="queue-count">0 canciones</span>
+          </div>
+          <div id="queueItems" class="queue-items"></div>
+        </div>
+      </main>
+
+      <!-- Player Controls (Bottom Bar) -->
+      <div class="player-bar">
+        <div class="player-track-info">
+          <div class="track-thumb">
+            <svg width="40" height="40" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+              <path d="M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+            </svg>
+          </div>
+          <div class="track-details">
+            <div class="track-name" id="playerTrackName">-</div>
+            <div class="track-meta" id="playerTrackMeta">-</div>
+          </div>
+        </div>
+
+        <div class="player-controls">
+          <div class="control-buttons">
+            <button id="btnShuffle" class="control-btn" title="Aleatorio">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 3 21 3 21 8"></polyline>
+                <line x1="4" y1="20" x2="21" y2="3"></line>
+                <polyline points="21 16 21 21 16 21"></polyline>
+                <line x1="15" y1="15" x2="21" y2="21"></line>
+                <line x1="4" y1="4" x2="9" y2="9"></line>
+              </svg>
+            </button>
+            
+            <button id="btnPrev" class="control-btn" title="Anterior">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                <line x1="5" y1="19" x2="5" y2="5"></line>
+              </svg>
+            </button>
+
+            <button id="btnPlayPause" class="control-btn-main" title="Reproducir" onclick="togglePlayPause()">
+              <svg id="playIcon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <svg id="pauseIcon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" style="display:none">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+              </svg>
+            </button>
+
+            <button id="btnNext" class="control-btn" title="Siguiente">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19"></line>
+              </svg>
+            </button>
+
+            <button id="btnRepeat" class="control-btn" title="Repetir">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="17 1 21 5 17 9"></polyline>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                <polyline points="7 23 3 19 7 15"></polyline>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="progress-container">
+            <span id="timeLabel" class="time">0:00</span>
+            <div class="progress-bar-wrapper">
+              <input id="progress" type="range" min="0" max="1000" value="0" class="progress-slider" />
+            </div>
+            <span id="durationLabel" class="time">0:00</span>
+          </div>
+        </div>
+
+        <div class="player-volume">
+          <button class="volume-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+          </button>
+          <input id="volume" type="range" min="0" max="100" value="60" class="volume-slider" />
+          <span id="volumeLabel" class="volume-value">60</span>
+        </div>
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
