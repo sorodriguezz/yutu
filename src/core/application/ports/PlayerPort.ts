@@ -18,4 +18,6 @@ export interface PlayerPort {
   pause(): Promise<void>;
   seek(seconds: number): Promise<void>;
   setVolume(volume0to100: number): Promise<void>;
+  setRate(rate: number): Promise<void>;
+  setEq(gains: number[]): Promise<void>;
 }

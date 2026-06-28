@@ -21,8 +21,11 @@ let isSeeking = false;
 // Signature of the queue so the 1s background sync doesn't re-render
 // (and destroy open dropdowns) when nothing actually changed.
 function queueHash(q) {
+  const items = q.items || [];
   return JSON.stringify({
-    ids: (q.items || []).map(t => t.id),
+    ids: items.map(t => t.id),
+    // firma de contenido: si cambia título/artista/carátula (metadata ID3), re-renderiza
+    sig: items.map(t => `${t.title || ''}|${t.author || ''}|${t.thumbnail ? 1 : 0}`),
     i: q.currentIndex,
     sh: q.shuffle,
     rp: q.repeat
@@ -43,7 +46,11 @@ const ICONS = {
   play: '<polygon points="6 4 20 12 6 20" fill="currentColor" stroke="none"/>',
   back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
   folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
-  warning: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+  warning: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  shuffle: '<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>',
+  plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  heart: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>',
+  heartFull: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" fill="currentColor" stroke="none"/>'
 };
 function icon(name, size) {
   size = size || 16;
@@ -145,6 +152,7 @@ async function fetchMetadataForTracks(tracks) {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadState();
   setupEventListeners();
+  setupDragDrop();
   render();
   startProgressLoop();
 });
@@ -311,6 +319,7 @@ function setupEventListeners() {
 
   window.api.onPlayerState((s) => { setPlaying(s === 'playing'); });
   window.api.onTimeUpdate((d) => { state.playback.currentTime = d.current; state.playback.duration = d.duration; });
+  if (window.api.onLevels) window.api.onLevels((levels) => renderVisualizer(levels));
   window.api.onQueueUpdate((q) => {
     const nq = { items: q.queue || [], currentIndex: q.index ?? -1, shuffle: !!q.shuffle, repeat: q.repeat || 'off' };
     const h = queueHash(nq);
@@ -319,6 +328,28 @@ function setupEventListeners() {
     state.queue = nq;
     fetchMetadataForTracks(state.queue.items).then(() => render());
     render();
+  });
+
+  // Atajos de teclado globales
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      if (e.key === 'Escape') e.target.blur();
+      return;
+    }
+    switch (e.key) {
+      case ' ': e.preventDefault(); togglePlayPause(); break;
+      case 'ArrowRight': nextTrack(); break;
+      case 'ArrowLeft': prevTrack(); break;
+      case 'ArrowUp': e.preventDefault(); nudgeVolume(5); break;
+      case 'ArrowDown': e.preventDefault(); nudgeVolume(-5); break;
+      case 'm': case 'M': { const b = $('btnMute'); if (b) b.click(); break; }
+      case 's': case 'S': toggleShuffle(); break;
+      case 'r': case 'R': cycleRepeat(); break;
+      case '/': e.preventDefault(); { const i = $('ytInput'); if (i) i.focus(); break; }
+      case '?': showShortcuts(); break;
+      case 'Escape': closeOverlays(); break;
+    }
   });
 }
 
@@ -361,14 +392,36 @@ window.deletePlaylist = function (id) {
   showConfirm('¿Eliminar esta playlist?', async () => {
     try {
       await window.api.deletePlaylist(id);
-      // si estabas viendo esa playlist, vuelve a la cola; y fuerza refresco
+      // si estabas viendo esa playlist, vuelve a la cola (la reproducción NO se toca)
       if (state.selectedPlaylist && state.selectedPlaylist.id === id) { state.selectedPlaylist = null; state.viewMode = 'queue'; }
-      lastQueueHash = '';
-      state.playback = { isPlaying: false, currentTime: 0, duration: 0 };
-      setPlaying(false);
       await loadState(); render(); showToast('🗑 Playlist eliminada');
     } catch (err) { showToast('❌ ' + err.message); }
   });
+};
+
+// Cambiar el icono de una playlist eligiendo un emoji
+const COVER_EMOJIS = ['🎵','🎶','🎸','🎹','🎧','🥁','🎤','🎺','🎷','🔥','💀','🌆','🌊','⚡','🌙','⭐','🚀','👾','🕹️','🎮','🌴','☕','🍷','🏎️','🦄','🎬','🌈','✨'];
+window.changeCover = function (id) {
+  const ex = document.querySelector('.emoji-modal'); if (ex) ex.remove();
+  const pop = document.createElement('div');
+  pop.className = 'modal emoji-modal';
+  pop.innerHTML = `<div class="modal-card">
+    <div class="modal-head"><h3>Elige un icono</h3><button class="icon-btn" onclick="this.closest('.modal').remove()">${icon('x', 16)}</button></div>
+    <div class="emoji-grid">
+      ${COVER_EMOJIS.map(e => `<button class="emoji-opt" onclick="setCover('${id}','${e}')">${e}</button>`).join('')}
+      <button class="emoji-opt" title="Nota por defecto" onclick="setCover('${id}','')">${icon('music', 16)}</button>
+    </div>
+  </div>`;
+  pop.onclick = (e) => { if (e.target === pop) pop.remove(); };
+  document.body.appendChild(pop);
+};
+window.setCover = async function (id, emoji) {
+  const m = document.querySelector('.emoji-modal'); if (m) m.remove();
+  try {
+    await window.api.setPlaylistCover(id, emoji);
+    await loadState(); render();
+    showToast(emoji ? '✅ Icono actualizado' : '↺ Icono por defecto');
+  } catch (err) { showToast('❌ ' + err.message); }
 };
 
 window.exportPlaylist = async function (id) {
@@ -398,13 +451,39 @@ window.removeFromPlaylist = async function (playlistId, trackId) {
 };
 
 window.playAtIndex = async function (i) {
+  // Si es la que ya está sonando, no la reinicies (solo reanuda si estaba pausada)
+  if (i === state.queue.currentIndex) {
+    if (!state.playback.isPlaying) togglePlayPause();
+    return;
+  }
   try { await window.api.playAtIndex(i); } catch (err) { showToast('❌ ' + err.message); }
 };
 
-window.removeFromQueue = function (index) {
-  state.queue.items.splice(index, 1);
-  if (state.queue.currentIndex >= index && state.queue.currentIndex > 0) state.queue.currentIndex--;
-  render();
+window.removeFromQueue = async function (index) {
+  lastQueueHash = '';
+  try { await window.api.removeFromQueue(index); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+// Agregar la playlist al final de la cola (sin reemplazar)
+window.appendPlaylist = async function (id) {
+  try { await window.api.appendPlaylistToQueue(id); showToast('➕ Agregada a la cola'); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+// Reproducir la playlist en aleatorio
+window.playShuffle = async function (id) {
+  try { await window.api.playPlaylistShuffled(id); backToQueue(); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+// Agregar UNA pista a la cola (desde la vista de playlist)
+window.enqueueOne = async function (index, source) {
+  const list = (source === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.items : state.queue.items;
+  const t = list[index];
+  if (!t) return;
+  try { await window.api.appendTrackToQueue(trackPayload(t)); showToast('➕ Agregada a la cola'); }
+  catch (err) { showToast('❌ ' + err.message); }
 };
 
 window.copyYoutubeLink = async function (videoId) {
@@ -422,6 +501,17 @@ window.addToQueue = async function () {
   const input = $('ytInput');
   const value = input ? input.value.trim() : '';
   if (!value) { showToast('⚠️ Ingresa una URL o ID'); return; }
+  // ¿Es una playlist de YouTube? → impórtala como playlist local
+  if (/[?&]list=/.test(value) && /youtu\.?be/.test(value)) {
+    input.value = '';
+    showToast('⏳ Importando playlist de YouTube…');
+    try {
+      const res = await window.api.importYouTubePlaylistUrl(value);
+      if (res && res.added > 0) { await loadState(); render(); showToast(`✅ "${res.name}" importada (${res.added} videos)`); }
+      else showToast('❌ No se pudo leer la playlist');
+    } catch (err) { showToast('❌ ' + err.message); }
+    return;
+  }
   try {
     const wasEmpty = state.queue.items.length === 0;
     await window.api.enqueueTrack(value);
@@ -524,6 +614,215 @@ window.addSearchResultToQueue = async function (videoId) {
 };
 window.closeSearchResults = function () { $('searchResults').classList.add('hidden'); $('ytInput').value = ''; };
 
+// ════ EXTRAS (filtro, temporizador, atajos, notificaciones) ═
+let queueFilter = '';
+window.onQueueFilter = function (val) {
+  queueFilter = (val || '').trim().toLowerCase();
+  render();
+};
+function matchesFilter(t) {
+  if (!queueFilter) return true;
+  return `${t.title || ''} ${t.author || ''}`.toLowerCase().includes(queueFilter);
+}
+
+// — Temporizador de apagado —
+let sleepTimerId = null;
+function pausePlayback() { if (state.playback.isPlaying) window.api.playPause(); }
+window.toggleSleepMenu = function (e) {
+  if (e) e.stopPropagation();
+  const open = document.querySelector('.sleep-menu');
+  if (open) { open.remove(); return; }
+  const btn = $('btnSleep');
+  const menu = document.createElement('div');
+  menu.className = 'sleep-menu';
+  const opts = [['15 minutos', 15], ['30 minutos', 30], ['45 minutos', 45], ['1 hora', 60], ['Cancelar', 0]];
+  menu.innerHTML = opts.map(([label, val]) => `<button onclick="setSleep(${val})">${label}</button>`).join('');
+  document.body.appendChild(menu);
+  const r = btn.getBoundingClientRect();
+  menu.style.top = (r.bottom + 8) + 'px';
+  menu.style.right = (window.innerWidth - r.right) + 'px';
+  setTimeout(() => document.addEventListener('click', closeSleepMenu), 0);
+};
+function closeSleepMenu() {
+  const m = document.querySelector('.sleep-menu'); if (m) m.remove();
+  document.removeEventListener('click', closeSleepMenu);
+}
+window.setSleep = function (min) {
+  closeSleepMenu();
+  if (sleepTimerId) { clearTimeout(sleepTimerId); sleepTimerId = null; }
+  const btn = $('btnSleep');
+  if (!min) { btn.classList.remove('active'); showToast('⏰ Temporizador cancelado'); return; }
+  btn.classList.add('active');
+  sleepTimerId = setTimeout(() => {
+    pausePlayback(); btn.classList.remove('active'); sleepTimerId = null;
+    showToast('⏰ Pausado por el temporizador');
+  }, min * 60000);
+  showToast(`⏰ Se pausará en ${min} min`);
+};
+
+// — Notificaciones de escritorio al cambiar de canción —
+let lastNotifiedId = null;
+function maybeNotifyTrack(track) {
+  if (!track || track.id === lastNotifiedId) return;
+  lastNotifiedId = track.id;
+  try {
+    if (typeof Notification === 'undefined') return;
+    const show = () => new Notification(track.title || 'Reproduciendo', {
+      body: track.author || (isLocal(track) ? 'Archivo local' : 'YouTube'),
+      icon: trackThumb(track) || undefined, silent: true
+    });
+    if (Notification.permission === 'granted') show();
+    else if (Notification.permission !== 'denied') Notification.requestPermission().then(p => { if (p === 'granted') show(); });
+  } catch (e) {}
+}
+
+// — Volumen por teclado —
+function nudgeVolume(delta) {
+  const vol = $('volume'); if (!vol) return;
+  const v = Math.max(0, Math.min(100, (parseInt(vol.value) || 0) + delta));
+  vol.value = v; updateSlider(vol, v, 100);
+  if ($('volumeLabel')) $('volumeLabel').textContent = v;
+  window.api.setVolume(v);
+}
+
+// — Overlay de atajos —
+window.showShortcuts = function () {
+  if (document.querySelector('.shortcuts-modal')) return;
+  const rows = [
+    ['Espacio', 'Reproducir / Pausar'], ['→ / ←', 'Siguiente / Anterior'],
+    ['↑ / ↓', 'Subir / bajar volumen'], ['M', 'Silenciar'], ['S', 'Aleatorio'],
+    ['R', 'Repetir'], ['/', 'Ir a la búsqueda'], ['?', 'Esta ayuda'], ['Esc', 'Cerrar']
+  ];
+  const modal = document.createElement('div');
+  modal.className = 'modal shortcuts-modal';
+  modal.innerHTML = `<div class="modal-card"><div class="modal-head"><h3>Atajos de teclado</h3>
+    <button class="icon-btn" onclick="this.closest('.modal').remove()">${icon('x', 16)}</button></div>
+    <div class="shortcuts-list">${rows.map(([k, d]) => `<div class="sc-row"><kbd>${k}</kbd><span>${escapeHtml(d)}</span></div>`).join('')}</div></div>`;
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+};
+function closeOverlays() {
+  document.querySelectorAll('.shortcuts-modal, .sleep-menu').forEach(el => el.remove());
+  ['settingsPanel', 'searchResults'].forEach(id => { const el = $(id); if (el) el.classList.add('hidden'); });
+}
+
+// ════ FASE 2 (drag&drop, velocidad, favoritos) ══════════════
+const MEDIA_RE = /\.(mp3|wav|flac|m4a|aac|ogg|opus|wma|mp4|webm|mkv|mov|avi|m4v)$/i;
+// ¿El arrastre trae archivos del sistema? (no un reordenamiento interno)
+function isFileDrag(e) {
+  const dt = e.dataTransfer;
+  return !!(dt && Array.from(dt.types || []).indexOf('Files') !== -1);
+}
+function setupDragDrop() {
+  const scrim = document.createElement('div');
+  scrim.className = 'drop-scrim';
+  scrim.innerHTML = '<div class="drop-card">🎧 Suelta tus archivos para agregarlos</div>';
+  document.body.appendChild(scrim);
+  let depth = 0;
+  document.addEventListener('dragenter', (e) => { if (!isFileDrag(e)) return; e.preventDefault(); depth++; document.body.classList.add('drag-over'); });
+  document.addEventListener('dragover', (e) => { if (!isFileDrag(e)) return; e.preventDefault(); });
+  document.addEventListener('dragleave', (e) => { if (!isFileDrag(e)) return; e.preventDefault(); depth = Math.max(0, depth - 1); if (!depth) document.body.classList.remove('drag-over'); });
+  document.addEventListener('drop', async (e) => {
+    if (!isFileDrag(e)) return; // arrastre interno (reordenar la cola) → ignóralo
+    e.preventDefault(); depth = 0; document.body.classList.remove('drag-over');
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    const paths = files.map(f => window.api.getPathForFile(f)).filter(p => p && MEDIA_RE.test(p));
+    if (!paths.length) { showToast('⚠️ Arrastra archivos de audio o video'); return; }
+    try {
+      const res = await window.api.enqueueLocalPaths(paths);
+      if (res && res.added > 0) { await loadState(); render(); showToast(`🎧 ${res.added} archivo(s) agregado(s)`); }
+    } catch (err) { showToast('❌ ' + err.message); }
+  });
+}
+
+// — Favoritos (playlist ❤) —
+const FAV_NAME = 'Favoritos';
+const FAV_EMOJI = '💜';
+function isFavPlaylist(pl) { return !!pl && (pl.name === FAV_NAME || pl.name === '❤ Favoritos'); }
+function sameTrack(a, b) {
+  return (!!a.videoId && a.videoId === b.videoId) || (!!a.filePath && a.filePath === b.filePath);
+}
+function favPlaylist() { return state.playlists.find(isFavPlaylist) || null; }
+function isFav(t) { const f = favPlaylist(); return !!(f && f.items.some(x => sameTrack(x, t))); }
+window.toggleFav = async function (index, source) {
+  const list = (source === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.items : state.queue.items;
+  const t = list[index];
+  if (t) await toggleFavoriteTrack(t);
+};
+async function toggleFavoriteTrack(t) {
+  try {
+    let fav = favPlaylist();
+    if (fav) {
+      const existing = fav.items.find(x => sameTrack(x, t));
+      if (existing) {
+        await window.api.removeTrackFromPlaylist(fav.id, existing.id);
+        await loadState(); render(); showToast('🤍 Quitado de favoritos'); return;
+      }
+    } else {
+      // Autocrear "Favoritos" con el corazón 💜 como icono
+      await window.api.createPlaylist(FAV_NAME);
+      await loadState();
+      fav = favPlaylist();
+      if (fav && !fav.cover) await window.api.setPlaylistCover(fav.id, FAV_EMOJI);
+    }
+    if (fav) { await window.api.addTrackToPlaylist(fav.id, trackPayload(t)); await loadState(); render(); showToast('💜 Agregado a favoritos'); }
+  } catch (err) { showToast('❌ ' + err.message); }
+}
+
+// — Reordenar la cola arrastrando —
+let qDragFrom = -1;
+window.onQDragStart = function (e, i) {
+  qDragFrom = i; e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', String(i)); } catch (x) {}
+  if (e.currentTarget) e.currentTarget.classList.add('dragging');
+};
+window.onQDragOver = function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+window.onQDragEnd = function (e) { if (e.currentTarget) e.currentTarget.classList.remove('dragging'); qDragFrom = -1; };
+window.onQDrop = async function (e, i) {
+  e.preventDefault();
+  let from = qDragFrom;
+  if (from < 0) { const d = parseInt(e.dataTransfer.getData('text/plain')); if (!isNaN(d)) from = d; }
+  qDragFrom = -1;
+  if (from < 0 || from === i) return;
+  const arr = state.queue.items;
+  if (from >= arr.length || i >= arr.length) return;
+  const [it] = arr.splice(from, 1); arr.splice(i, 0, it);
+  let idx = state.queue.currentIndex;
+  if (idx === from) idx = i;
+  else if (from < idx && i >= idx) idx--;
+  else if (from > idx && i <= idx) idx++;
+  state.queue.currentIndex = idx;
+  lastQueueHash = '';
+  renderQueue();
+  try { await window.api.moveInQueue(from, i); } catch (err) {}
+};
+
+// ════ FASE 4 (visualizador + ecualizador) ══════════════════
+let vizBars = 0;
+function renderVisualizer(levels) {
+  const eq = $('equalizer');
+  if (!eq) return;
+  if (!levels || !levels.length) {
+    if (eq.classList.contains('live')) {
+      eq.classList.remove('live');
+      eq.innerHTML = '<span></span><span></span><span></span><span></span><span></span>';
+      vizBars = 0;
+    }
+    return;
+  }
+  eq.classList.add('live');
+  if (vizBars !== levels.length) { eq.innerHTML = levels.map(() => '<span></span>').join(''); vizBars = levels.length; }
+  const spans = eq.children;
+  for (let i = 0; i < levels.length; i++) {
+    if (spans[i]) spans[i].style.height = (5 + (levels[i] / 100) * 17).toFixed(1) + 'px';
+  }
+}
+window.applyEq = function () {
+  const gains = [0, 1, 2, 3, 4].map(i => { const el = $('eq' + i); return el ? parseInt(el.value) : 0; });
+  window.api.setEq(gains);
+};
+window.resetEq = function () { [0, 1, 2, 3, 4].forEach(i => { const el = $('eq' + i); if (el) el.value = 0; }); applyEq(); };
+
 // ════ RENDER ══════════════════════════════════════════════
 function render() {
   renderPlaylists();
@@ -540,9 +839,10 @@ function renderPlaylists() {
     c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('folder', 30)}</div><div class="empty-state-text">Sin playlists aún</div></div>`;
     return;
   }
-  c.innerHTML = state.playlists.map(pl => `
+  const ordered = [...state.playlists].sort((a, b) => (isFavPlaylist(b) ? 1 : 0) - (isFavPlaylist(a) ? 1 : 0));
+  c.innerHTML = ordered.map(pl => `
     <div class="playlist-item" onclick="openPlaylist('${pl.id}')">
-      <div class="playlist-cover">${icon('music', 18)}</div>
+      <div class="playlist-cover">${pl.cover ? `<span class="cover-emoji">${escapeHtml(pl.cover)}</span>` : icon('music', 18)}</div>
       <div class="playlist-details">
         <div class="playlist-name">${escapeHtml(pl.name)}</div>
         <div class="playlist-meta">${pl.items.length} pistas</div>
@@ -571,8 +871,14 @@ function queueItemHtml(track, i, opts) {
     ? `<button onclick="event.stopPropagation(); copyYoutubeLink('${track.videoId}')" title="Copiar link">${icon('link', 14)}</button>` : '';
   const plSelect = addable.length
     ? `<select class="add-to-playlist-select" data-track-index="${i}" data-source="${curPlId ? 'playlist' : 'queue'}" onclick="event.stopPropagation();"><option value="">+ Playlist</option>${plOpts}</select>` : '';
+  const faved = isFav(track);
+  const favBtn = `<button class="fav-btn ${faved ? 'on' : ''}" onclick="event.stopPropagation(); toggleFav(${i}, '${curPlId ? 'playlist' : 'queue'}')" title="${faved ? 'Quitar de favoritos' : 'Agregar a favoritos'}">${icon(faved ? 'heartFull' : 'heart', 14)}</button>`;
+  const queueBtn = curPlId
+    ? `<button onclick="event.stopPropagation(); enqueueOne(${i}, 'playlist')" title="Agregar a la cola">${icon('plus', 14)}</button>` : '';
+  const dragAttrs = opts.draggable
+    ? ` draggable="true" ondragstart="onQDragStart(event,${i})" ondragover="onQDragOver(event)" ondrop="onQDrop(event,${i})" ondragend="onQDragEnd(event)"` : '';
   return `
-    <div class="queue-item ${active ? 'active' : ''}" onclick="${opts.onclick}">
+    <div class="queue-item ${active ? 'active' : ''}" onclick="${opts.onclick}"${dragAttrs}>
       <div class="queue-item-index">${active ? icon('play', 11) : i + 1}</div>
       <div class="queue-thumb">${thumbHtml}</div>
       <div class="queue-item-info">
@@ -580,7 +886,7 @@ function queueItemHtml(track, i, opts) {
         <div class="queue-item-meta">${tag}${author}</div>
       </div>
       <div class="queue-item-actions">
-        ${copyBtn}${plSelect}
+        ${favBtn}${queueBtn}${copyBtn}${plSelect}
         ${opts.removeBtn}
       </div>
     </div>`;
@@ -595,25 +901,35 @@ function renderQueue() {
     c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('music', 30)}</div><div class="empty-state-text">Cola vacía. Agrega música local o de YouTube.</div></div>`;
     return;
   }
-  c.innerHTML = state.queue.items.map((t, i) => queueItemHtml(t, i, {
-    active: i === state.queue.currentIndex,
-    onclick: `playAtIndex(${i})`,
-    removeBtn: `<button onclick="event.stopPropagation(); removeFromQueue(${i})" title="Quitar">${icon('x', 14)}</button>`
-  })).join('');
+  c.innerHTML = state.queue.items
+    .map((t, i) => ({ t, i }))
+    .filter(({ t }) => matchesFilter(t))
+    .map(({ t, i }) => queueItemHtml(t, i, {
+      active: i === state.queue.currentIndex,
+      onclick: `playAtIndex(${i})`,
+      draggable: !queueFilter,
+      removeBtn: `<button onclick="event.stopPropagation(); removeFromQueue(${i})" title="Quitar">${icon('x', 14)}</button>`
+    })).join('') || `<div class="empty-state"><div class="empty-state-text">Sin coincidencias para “${escapeHtml(queueFilter)}”.</div></div>`;
 }
 
 function renderPlaylistView() {
   const c = $('queueItems'), count = $('queueCount'), title = $('queueTitle');
   const pl = state.selectedPlaylist;
   if (!pl || !c) return;
-  if (title) title.innerHTML = `<button class="back-btn" onclick="backToQueue()" title="Volver">${icon('back', 18)}</button>${escapeHtml(pl.name)}`;
+  if (title) title.innerHTML = `<button class="back-btn" onclick="backToQueue()" title="Volver">${icon('back', 18)}</button>` +
+    `<span class="pl-cover" onclick="changeCover('${pl.id}')" title="Cambiar icono">${pl.cover ? `<span class="cover-emoji">${escapeHtml(pl.cover)}</span>` : icon('music', 16)}<span class="pl-cover-edit">${icon('plus', 11)}</span></span>` +
+    escapeHtml(pl.name);
   if (count) count.textContent = `${pl.items.length} ${pl.items.length === 1 ? 'pista' : 'pistas'}`;
   if (!pl.items.length) {
     c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('folder', 30)}</div><div class="empty-state-text">Playlist vacía.</div></div>`;
     return;
   }
-  c.innerHTML = `<button class="play-all-btn" onclick="playFromPlaylist('${pl.id}', 0)">${icon('play', 14)} Reproducir todo</button>` +
-    pl.items.map((t, i) => queueItemHtml(t, i, {
+  c.innerHTML = `<div class="playlist-toolbar">
+      <button class="play-all-btn" onclick="playFromPlaylist('${pl.id}', 0)">${icon('play', 14)} Reproducir todo</button>
+      <button class="play-all-btn ghost" onclick="playShuffle('${pl.id}')">${icon('shuffle', 14)} Aleatorio</button>
+      <button class="play-all-btn ghost" onclick="appendPlaylist('${pl.id}')">${icon('plus', 14)} Cola</button>
+    </div>` +
+    pl.items.map((t, i) => ({ t, i })).filter(({ t }) => matchesFilter(t)).map(({ t, i }) => queueItemHtml(t, i, {
       active: false,
       onclick: `playFromPlaylist('${pl.id}', ${i})`,
       removeBtn: `<button onclick="event.stopPropagation(); removeFromPlaylist('${pl.id}', '${t.id}')" title="Quitar">${icon('trash', 15)}</button>`
@@ -639,6 +955,7 @@ function renderTransport() {
 
 function renderNowPlaying() {
   const cur = state.queue.currentIndex >= 0 ? state.queue.items[state.queue.currentIndex] : null;
+  maybeNotifyTrack(cur);
   const heroImg = $('heroImg'), heroFallback = $('heroFallback'), heroBadge = $('heroBadge');
   const pbImg = $('playerThumbImg'), pbIcon = $('playerThumbIcon');
 

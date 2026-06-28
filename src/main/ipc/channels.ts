@@ -7,6 +7,7 @@ export const Channels = {
   Playlist_RemoveTrack: "playlist:removeTrack",
   Playlist_Export: "playlist:export",
   Playlist_Import: "playlist:import",
+  Playlist_SetCover: "playlist:setCover",
 
   Queue_EnqueueTrack: "queue:enqueueTrack",
   Queue_EnqueuePlaylist: "queue:enqueuePlaylist",
@@ -15,10 +16,19 @@ export const Channels = {
   Queue_Prev: "queue:prev",
   Queue_ToggleShuffle: "queue:toggleShuffle",
   Queue_CycleRepeat: "queue:cycleRepeat",
+  Queue_Move: "queue:move",
+  Queue_Remove: "queue:remove",
+  Queue_AppendPlaylist: "queue:appendPlaylist",
+  Queue_AppendTrack: "queue:appendTrack",
+  Queue_PlayShuffled: "queue:playShuffled",
 
   YouTube_Search: "youtube:search",
+  YouTube_ImportPlaylistUrl: "youtube:importPlaylistUrl",
 
   Local_PickAndEnqueue: "local:pickAndEnqueue",
+  Local_EnqueuePaths: "local:enqueuePaths",
+
+  Playback_SetRate: "playback:setRate",
 
   Auth_SignIn: "auth:signIn",
   Auth_SignOut: "auth:signOut",

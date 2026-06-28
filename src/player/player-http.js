@@ -5,6 +5,7 @@ let ytReady = false;
 let pendingCommands = [];
 let currentMode = 'youtube'; // 'youtube' | 'local'
 let lastVolume = 60; // 0..100
+let lastRate = 1;    // velocidad de reproducción
 
 const localMedia = document.getElementById('localMedia');
 const audioScene = document.getElementById('audioScene');
@@ -90,6 +91,53 @@ localMedia.addEventListener('error', () => {
   if (currentMode === 'local' && window.playerApi) window.playerApi.sendPlayerState('error');
 });
 
+// ---------- Web Audio: visualizador + ecualizador (solo audio local) ----------
+let audioCtx = null, srcNode = null, analyser = null, eqFilters = [], vizRunning = false;
+const EQ_FREQS = [60, 230, 910, 3600, 14000];
+function ensureAudioGraph() {
+  if (audioCtx) return true;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    audioCtx = new AC();
+    srcNode = audioCtx.createMediaElementSource(localMedia);
+    let node = srcNode;
+    eqFilters = EQ_FREQS.map((f) => {
+      const biq = audioCtx.createBiquadFilter();
+      biq.type = 'peaking'; biq.frequency.value = f; biq.Q.value = 1; biq.gain.value = 0;
+      node.connect(biq); node = biq; return biq;
+    });
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64; analyser.smoothingTimeConstant = 0.82;
+    node.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    startVisualizer();
+    return true;
+  } catch (e) { audioCtx = null; return false; }
+}
+function startVisualizer() {
+  if (vizRunning || !analyser) return; vizRunning = true;
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  let last = 0;
+  function tick() {
+    requestAnimationFrame(tick);
+    const now = performance.now();
+    if (now - last < 55) return; last = now;
+    if (!analyser || currentMode !== 'local' || localMedia.paused) {
+      if (window.playerApi) window.playerApi.sendLevels([]);
+      return;
+    }
+    analyser.getByteFrequencyData(data);
+    const bins = data.length, N = 22, step = Math.max(1, Math.floor(bins / N)), out = [];
+    for (let i = 0; i < N; i++) {
+      let s = 0; for (let j = 0; j < step; j++) s += data[i * step + j] || 0;
+      out.push(Math.round((s / step) / 255 * 100));
+    }
+    if (window.playerApi) window.playerApi.sendLevels(out);
+  }
+  tick();
+}
+
 // ---------- Mode switching ----------
 function switchToYouTube() {
   currentMode = 'youtube';
@@ -129,14 +177,21 @@ function registerCommandListeners() {
       const src = '/media?src=' + encodeURIComponent(media.filePath);
       localMedia.src = src;
       localMedia.volume = Math.max(0, Math.min(1, lastVolume / 100));
-      const tryPlay = () => { localMedia.play().catch(() => {}); };
+      const tryPlay = () => {
+        try { localMedia.playbackRate = lastRate; } catch (e) {}
+        ensureAudioGraph();
+        try { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {}
+        localMedia.play().catch(() => {});
+      };
       localMedia.oncanplay = tryPlay;
       tryPlay();
     } else if (media.videoId) {
       switchToYouTube();
       const exec = () => {
-        if (ytPlayer && ytReady) ytPlayer.loadVideoById(media.videoId);
-        else pendingCommands.push(exec);
+        if (ytPlayer && ytReady) {
+          ytPlayer.loadVideoById(media.videoId);
+          try { if (lastRate !== 1 && ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(lastRate); } catch (e) {}
+        } else pendingCommands.push(exec);
       };
       exec();
     } else {
@@ -177,6 +232,20 @@ function registerCommandListeners() {
     lastVolume = volume;
     if (currentMode === 'local') localMedia.volume = Math.max(0, Math.min(1, volume / 100));
     else if (ytPlayer && ytReady) ytPlayer.setVolume(volume);
+  });
+
+  window.playerApi.onSetRate((rate) => {
+    lastRate = rate;
+    try { localMedia.playbackRate = rate; } catch (e) {}
+    try { if (ytPlayer && ytReady && ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(rate); } catch (e) {}
+  });
+
+  window.playerApi.onSetEq((gains) => {
+    if (!ensureAudioGraph()) return;
+    for (let i = 0; i < eqFilters.length; i++) {
+      const g = (gains && typeof gains[i] === 'number') ? gains[i] : 0;
+      try { eqFilters[i].gain.value = Math.max(-12, Math.min(12, g)); } catch (e) {}
+    }
   });
 }
 

@@ -60,6 +60,31 @@ export class QueueService {
     return this.current();
   }
 
+  // Quita una pista de la cola y ajusta el índice. Indica si se quitó la actual.
+  removeAt(idx: number): { removedCurrent: boolean; empty: boolean } {
+    if (idx < 0 || idx >= this.queue.length) {
+      return { removedCurrent: false, empty: this.queue.length === 0 };
+    }
+    const wasCurrent = idx === this.index;
+    this.queue.splice(idx, 1);
+    if (this.queue.length === 0) this.index = -1;
+    else if (idx < this.index) this.index--;
+    else if (wasCurrent && this.index >= this.queue.length) this.index = this.queue.length - 1;
+    return { removedCurrent: wasCurrent, empty: this.queue.length === 0 };
+  }
+
+  // Reordena la cola moviendo un elemento de una posición a otra,
+  // conservando la pista que se está reproduciendo.
+  move(from: number, to: number) {
+    const n = this.queue.length;
+    if (from < 0 || from >= n || to < 0 || to >= n || from === to) return;
+    const [item] = this.queue.splice(from, 1);
+    this.queue.splice(to, 0, item);
+    if (this.index === from) this.index = to;
+    else if (from < this.index && to >= this.index) this.index--;
+    else if (from > this.index && to <= this.index) this.index++;
+  }
+
   current() {
     if (this.index < 0 || this.index >= this.queue.length) return null;
     return this.queue[this.index];

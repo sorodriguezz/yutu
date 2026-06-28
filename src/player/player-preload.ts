@@ -18,6 +18,15 @@ contextBridge.exposeInMainWorld('playerApi', {
   onSetVolume: (callback: (volume: number) => void) => {
     ipcRenderer.on('player:setVolume', (_, volume) => callback(volume));
   },
+  onSetRate: (callback: (rate: number) => void) => {
+    ipcRenderer.on('player:setRate', (_, rate) => callback(rate));
+  },
+  onSetEq: (callback: (gains: number[]) => void) => {
+    ipcRenderer.on('player:setEq', (_, gains) => callback(gains));
+  },
+  sendLevels: (levels: number[]) => {
+    ipcRenderer.send('player:levels', levels);
+  },
 
   // Events to main
   sendPlayerState: (state: string) => {

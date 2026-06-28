@@ -98,6 +98,16 @@
                 <rect x="1" y="5" width="15" height="14" rx="2"></rect>
               </svg>
             </button>
+            <button id="btnSleep" class="icon-btn lg" title="Temporizador de apagado" onclick="toggleSleepMenu(event)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline>
+              </svg>
+            </button>
+            <button class="icon-btn lg" title="Atajos de teclado (?)" onclick="showShortcuts()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </button>
             <button class="icon-btn lg" title="Ajustes" onclick="toggleSettings()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"></circle>
@@ -140,6 +150,7 @@
           <div class="queue-head">
             <h3 id="queueTitle">Cola de reproducción</h3>
             <span id="queueCount" class="count-chip">0 pistas</span>
+            <input id="queueFilter" class="queue-filter" type="text" placeholder="Filtrar…" oninput="onQueueFilter(this.value)" />
           </div>
           <div id="queueItems" class="queue-list"></div>
         </section>
@@ -231,6 +242,17 @@
           <div class="setting-ctl">
             <input id="volumeDefault" type="range" min="0" max="100" value="60" class="slider" />
             <span id="volumeDefaultLabel" class="vol-val">60</span>
+          </div>
+        </div>
+
+        <div class="setting col">
+          <div class="setting-label"><span>Ecualizador</span><small>Solo para archivos locales · <a class="link" href="#" onclick="event.preventDefault(); resetEq()">Reset</a></small></div>
+          <div class="eq-bands">
+            <div class="eq-band"><input id="eq0" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Graves</span><span class="eq-hz">60 Hz</span></div>
+            <div class="eq-band"><input id="eq1" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Medio-bajo</span><span class="eq-hz">230 Hz</span></div>
+            <div class="eq-band"><input id="eq2" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Medios</span><span class="eq-hz">910 Hz</span></div>
+            <div class="eq-band"><input id="eq3" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Medio-alto</span><span class="eq-hz">3.6 kHz</span></div>
+            <div class="eq-band"><input id="eq4" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Agudos</span><span class="eq-hz">14 kHz</span></div>
           </div>
         </div>
 

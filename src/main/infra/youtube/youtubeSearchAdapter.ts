@@ -211,6 +211,64 @@ export class YouTubeSearchAdapter implements YouTubeSearchPort {
   }
 
   /**
+   * Importa una playlist de YouTube desde su URL (sin API key, scraping de
+   * ytInitialData). Devuelve el título y los videos.
+   */
+  async getPlaylistFromUrl(
+    url: string
+  ): Promise<{ title: string; items: { videoId: string; title: string; author?: string; thumbnail?: string }[] }> {
+    let listId = "";
+    try { listId = new URL(url).searchParams.get("list") || ""; } catch {}
+    if (!listId) { const m = url.match(/[?&]list=([^&]+)/); if (m) listId = m[1]; }
+    if (!listId) return { title: "Playlist", items: [] };
+
+    try {
+      const res = await fetch(`https://www.youtube.com/playlist?list=${listId}&hl=en&gl=US`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+          "Accept-Language": "en-US,en;q=0.9",
+          Cookie: "CONSENT=YES+cb",
+        },
+      });
+      if (!res.ok) return { title: "Playlist", items: [] };
+      const html = await res.text();
+      let m = html.match(/var ytInitialData = (\{.+?\});<\/script>/s);
+      if (!m) m = html.match(/ytInitialData"\]\s*=\s*(\{.+?\});/s);
+      if (!m) return { title: "Playlist", items: [] };
+      const data = JSON.parse(m[1]);
+
+      let title = "Playlist";
+      try {
+        title =
+          data?.metadata?.playlistMetadataRenderer?.title ||
+          data?.header?.playlistHeaderRenderer?.title?.simpleText ||
+          title;
+      } catch {}
+
+      const items: { videoId: string; title: string; author?: string; thumbnail?: string }[] = [];
+      const walk = (node: any) => {
+        if (!node || typeof node !== "object" || items.length >= 300) return;
+        const v = node.playlistVideoRenderer;
+        if (v && v.videoId) {
+          items.push({
+            videoId: v.videoId,
+            title: v.title?.runs?.[0]?.text || v.title?.simpleText || v.videoId,
+            author: v.shortBylineText?.runs?.[0]?.text,
+            thumbnail: `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`,
+          });
+        }
+        if (Array.isArray(node)) { for (const c of node) walk(c); }
+        else { for (const k of Object.keys(node)) walk(node[k]); }
+      };
+      walk(data);
+      return { title, items };
+    } catch (e) {
+      console.error("Error importing playlist:", e);
+      return { title: "Playlist", items: [] };
+    }
+  }
+
+  /**
    * Get video info using oEmbed (no API key required, but limited info)
    */
   private async getVideoInfoWithoutApi(

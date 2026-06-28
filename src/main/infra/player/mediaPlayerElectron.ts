@@ -32,4 +32,13 @@ export class ElectronMediaPlayer implements PlayerPort {
     const v = Math.max(0, Math.min(100, Math.round(volume0to100)));
     this.webContents.send("player:setVolume", v);
   }
+
+  async setRate(rate: number): Promise<void> {
+    const r = Math.max(0.25, Math.min(2, rate));
+    this.webContents.send("player:setRate", r);
+  }
+
+  async setEq(gains: number[]): Promise<void> {
+    this.webContents.send("player:setEq", gains);
+  }
 }

@@ -9,6 +9,10 @@ const AUDIO_EXTS = new Set([
   ".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wma",
 ]);
 
+// Carga un módulo ESM (music-metadata) desde CommonJS sin que tsc
+// transforme el import() dinámico a require().
+const importEsm = new Function("m", "return import(m)") as (m: string) => Promise<any>;
+
 export function registerIpc(
   win: () => BrowserWindow | null, 
   c: AppContainer,
@@ -37,15 +41,10 @@ export function registerIpc(
   ipcMain.handle('playlist:create', async (_e, name: string) => 
     c.uc.playlist.create.execute(name));
   
-  ipcMain.handle('playlist:delete', async (_e, playlistId: string) => {
-    const result = await c.uc.playlist.delete.execute(playlistId);
-    // Reiniciar reproducción: limpiar la cola y detener el player
-    c.queue.clear();
-    isPlaying = false;
-    await c.player.load({ provider: 'youtube' }); // detiene/limpia el media actual
-    sendQueueUpdate();
-    return result;
-  });
+  ipcMain.handle('playlist:delete', async (_e, playlistId: string) =>
+    // Solo borra la playlist de la biblioteca. La cola y la reproducción
+    // son independientes y NO se tocan.
+    c.uc.playlist.delete.execute(playlistId));
   
   ipcMain.handle('playlist:addTrack', async (_e, playlistId: string, track: any) =>
     c.uc.playlist.addTrack.execute(playlistId, track)
@@ -58,8 +57,11 @@ export function registerIpc(
   ipcMain.handle('playlist:export', async (_e, playlistId: string) => 
     c.uc.playlist.export.execute(playlistId));
   
-  ipcMain.handle('playlist:import', async () => 
+  ipcMain.handle('playlist:import', async () =>
     c.uc.playlist.import.execute());
+
+  ipcMain.handle('playlist:setCover', async (_e, playlistId: string, cover: string) =>
+    c.uc.playlist.setCover.execute(playlistId, cover));
 
   // Queue/Playback
   ipcMain.handle('queue:enqueueTrack', async (_e, urlOrId: string) => {
@@ -113,6 +115,68 @@ export function registerIpc(
     sendQueueUpdate();
   });
 
+  ipcMain.handle('queue:move', async (_e, from: number, to: number) => {
+    c.queue.move(from, to);
+    sendQueueUpdate();
+    return c.queue.getState();
+  });
+
+  // Quitar de la cola (de verdad): si era la actual, salta a la siguiente o detiene
+  ipcMain.handle('queue:remove', async (_e, index: number) => {
+    const res = c.queue.removeAt(index);
+    if (res.removedCurrent) {
+      if (res.empty) {
+        await c.player.load({ provider: 'youtube' }); // detiene/limpia
+        isPlaying = false;
+      } else {
+        const st = c.queue.getState();
+        await c.uc.playback.playAt.execute(st.index);
+        isPlaying = true;
+      }
+    }
+    sendQueueUpdate();
+    return c.queue.getState();
+  });
+
+  // Agregar una playlist al final de la cola (sin reemplazarla)
+  ipcMain.handle('queue:appendPlaylist', async (_e, playlistId: string) => {
+    const playlists = await c.playlistRepo.getAll();
+    const pl = playlists.find((p) => p.id === playlistId);
+    if (!pl) return c.queue.getState();
+    const wasEmpty = c.queue.getState().queue.length === 0;
+    const now = Date.now();
+    const tracks: Track[] = pl.items.map((t) => ({ ...t, id: crypto.randomUUID(), addedAt: now }));
+    await c.uc.playback.enqueueTracks.execute(tracks);
+    sendQueueUpdate();
+    if (wasEmpty) { await c.uc.playback.playAt.execute(0); isPlaying = true; sendQueueUpdate(); }
+    return c.queue.getState();
+  });
+
+  // Agregar UNA pista al final de la cola
+  ipcMain.handle('queue:appendTrack', async (_e, track: any) => {
+    if (!track) return c.queue.getState();
+    const wasEmpty = c.queue.getState().queue.length === 0;
+    const t: Track = { ...track, id: crypto.randomUUID(), addedAt: Date.now() };
+    await c.uc.playback.enqueueTracks.execute([t]);
+    sendQueueUpdate();
+    if (wasEmpty) { await c.uc.playback.playAt.execute(0); isPlaying = true; sendQueueUpdate(); }
+    return c.queue.getState();
+  });
+
+  // Reproducir una playlist en modo aleatorio
+  ipcMain.handle('queue:playShuffled', async (_e, playlistId: string) => {
+    const playlists = await c.playlistRepo.getAll();
+    const pl = playlists.find((p) => p.id === playlistId);
+    if (!pl || !pl.items.length) return c.queue.getState();
+    c.queue.replaceQueue(pl.items, 0);
+    c.queue.setShuffle(true);
+    const start = Math.floor(Math.random() * pl.items.length);
+    await c.uc.playback.playAt.execute(start);
+    isPlaying = true;
+    sendQueueUpdate();
+    return c.queue.getState();
+  });
+
   // Player controls
   ipcMain.handle('playback:playPause', async () => {
     if (isPlaying) {
@@ -137,8 +201,11 @@ export function registerIpc(
   ipcMain.handle('playback:seek', async (_e, seconds: number) => 
     c.uc.playback.seek.execute(seconds));
   
-  ipcMain.handle('playback:setVolume', async (_e, vol: number) => 
+  ipcMain.handle('playback:setVolume', async (_e, vol: number) =>
     c.uc.playback.setVolume.execute(vol));
+
+  ipcMain.handle('playback:setRate', async (_e, rate: number) => c.player.setRate(rate));
+  ipcMain.handle('playback:setEq', async (_e, gains: number[]) => c.player.setEq(gains));
 
   // Settings
   ipcMain.handle('settings:setAccent', async (_e, color: string) => 
@@ -157,17 +224,40 @@ export function registerIpc(
   ipcMain.handle('youtube:search', async (_e, query: string) =>
     c.uc.playback.searchYouTube.execute(query));
 
-  // Local files: open dialog, build tracks, enqueue (autoplay if queue empty)
-  ipcMain.handle('local:pickAndEnqueue', async () => {
-    const paths = await c.fileDialog.pickMediaFiles();
-    if (!paths.length) {
-      return { added: 0, queue: c.queue.getState() };
-    }
+  // Importar una playlist de YouTube por URL (scraping, sin API key)
+  ipcMain.handle('youtube:importPlaylistUrl', async (_e, url: string) => {
+    const pl = await c.youtubeSearch.getPlaylistFromUrl(url);
+    if (!pl.items.length) return { added: 0, name: pl.title };
+    const now = Date.now();
+    const tracks: Track[] = pl.items.map((it) => ({
+      id: crypto.randomUUID(),
+      provider: "youtube" as const,
+      videoId: it.videoId,
+      title: it.title,
+      author: it.author,
+      thumbnail: it.thumbnail,
+      addedAt: now,
+    }));
+    const playlists = await c.playlistRepo.getAll();
+    const newPl = {
+      id: crypto.randomUUID(),
+      name: pl.title || "YouTube",
+      createdAt: now,
+      updatedAt: now,
+      items: tracks,
+    };
+    await c.playlistRepo.saveAll([...playlists, newPl]);
+    return { added: tracks.length, name: newPl.name };
+  });
+
+  // Helper: construye tracks locales desde rutas y los encola (autoplay si la cola está vacía)
+  async function enqueueLocalPaths(paths: string[]) {
+    const valid = (paths || []).filter((p) => typeof p === "string" && !!p);
+    if (!valid.length) return { added: 0, queue: c.queue.getState() };
 
     const wasEmpty = c.queue.getState().queue.length === 0;
     const now = Date.now();
-
-    const tracks: Track[] = paths.map((p) => {
+    const tracks: Track[] = valid.map((p) => {
       const ext = path.extname(p).toLowerCase();
       const mediaType: "audio" | "video" = AUDIO_EXTS.has(ext) ? "audio" : "video";
       const base = path.basename(p, path.extname(p));
@@ -184,15 +274,49 @@ export function registerIpc(
 
     await c.uc.playback.enqueueTracks.execute(tracks);
     sendQueueUpdate();
-
     if (wasEmpty) {
       await c.uc.playback.playAt.execute(0);
       isPlaying = true;
       sendQueueUpdate();
     }
-
+    enrichLocalMetadata(tracks); // ID3 + carátula en segundo plano
     return { added: tracks.length, queue: c.queue.getState() };
+  }
+
+  // Lee metadata (título, artista, carátula, duración) de los archivos locales
+  // y la aplica a las pistas ya encoladas (mutación por referencia).
+  async function enrichLocalMetadata(tracks: Track[]) {
+    let mm: any;
+    try { mm = await importEsm("music-metadata"); } catch { return; }
+    let changed = false;
+    for (const t of tracks) {
+      if (!t.filePath) continue;
+      try {
+        const meta = await mm.parseFile(t.filePath, { duration: true });
+        const common = meta.common || {};
+        if (common.title) { t.title = common.title; changed = true; }
+        if (common.artist) { t.author = common.artist; changed = true; }
+        const pic = common.picture && common.picture[0];
+        if (pic && pic.data) {
+          const b64 = Buffer.from(pic.data).toString("base64");
+          t.thumbnail = `data:${pic.format || "image/jpeg"};base64,${b64}`;
+          changed = true;
+        }
+        if (meta.format && meta.format.duration) t.duration = Math.round(meta.format.duration);
+      } catch (e) {}
+    }
+    if (changed) sendQueueUpdate();
+  }
+
+  // Local files: abrir diálogo
+  ipcMain.handle('local:pickAndEnqueue', async () => {
+    const paths = await c.fileDialog.pickMediaFiles();
+    return enqueueLocalPaths(paths);
   });
+
+  // Local files: arrastrar y soltar (rutas desde el renderer)
+  ipcMain.handle('local:enqueuePaths', async (_e, paths: string[]) =>
+    enqueueLocalPaths(paths));
 
   // Google account / auth
   ipcMain.handle('auth:signIn', async () => c.uc.auth.signIn.execute());
@@ -225,6 +349,10 @@ export function registerIpc(
 
   ipcMain.on('player:timeUpdate', (_e, data: any) => {
     win()?.webContents.send('player:timeUpdate', data);
+  });
+
+  ipcMain.on('player:levels', (_e, levels: number[]) => {
+    win()?.webContents.send('player:levels', levels);
   });
 
   ipcMain.on('player:ended', async () => {

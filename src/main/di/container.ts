@@ -20,6 +20,7 @@ import { AddTrackToPlaylist } from "../../core/application/usecases/playlists/Ad
 import { RemoveTrackFromPlaylist } from "../../core/application/usecases/playlists/RemoveTrackFromPlaylist";
 import { ExportPlaylist } from "../../core/application/usecases/playlists/ExportPlaylist";
 import { ImportPlaylist } from "../../core/application/usecases/playlists/ImportPlaylist";
+import { SetPlaylistCover } from "../../core/application/usecases/playlists/SetPlaylistCover";
 
 import { EnqueueTrack } from "../../core/application/usecases/playback/EnqueueTrack";
 import { EnqueueTracks } from "../../core/application/usecases/playback/EnqueueTracks";
@@ -99,7 +100,8 @@ export function buildContainer(opts: {
       addTrack: new AddTrackToPlaylist(playlistRepo, makeId),
       removeTrack: new RemoveTrackFromPlaylist(playlistRepo),
       export: new ExportPlaylist(playlistRepo, archive),
-      import: new ImportPlaylist(playlistRepo, archive, makeId)
+      import: new ImportPlaylist(playlistRepo, archive, makeId),
+      setCover: new SetPlaylistCover(playlistRepo)
     },
     playback: {
       enqueueTrack: new EnqueueTrack(queue),
