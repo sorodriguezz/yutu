@@ -38,6 +38,13 @@ import { UpdateAccentColor } from "../../core/application/usecases/settings/Upda
 import { UpdateVolumeDefault } from "../../core/application/usecases/settings/UpdateVolumeDefault";
 import { UpdateYouTubeApiKey } from "../../core/application/usecases/settings/UpdateYouTubeApiKey";
 import { UpdateGoogleCredentials } from "../../core/application/usecases/settings/UpdateGoogleCredentials";
+import { UpdateCrossfade } from "../../core/application/usecases/settings/UpdateCrossfade";
+import { UpdateLanguage } from "../../core/application/usecases/settings/UpdateLanguage";
+import { UpdateTheme } from "../../core/application/usecases/settings/UpdateTheme";
+import { UpdateBlockAds } from "../../core/application/usecases/settings/UpdateBlockAds";
+import { UpdateDownloadDir } from "../../core/application/usecases/settings/UpdateDownloadDir";
+import { DownloadAudio } from "../../core/application/usecases/download/DownloadAudio";
+import { YtDlpDownloader } from "../infra/download/ytDlpDownloader";
 import { SearchYouTube } from "../../core/application/usecases/playback/SearchYouTube";
 
 import { SignInGoogle } from "../../core/application/usecases/auth/SignInGoogle";
@@ -59,7 +66,15 @@ export function buildContainer(opts: {
   const dbFile = path.join(app.getPath("userData"), "db.json");
   const db = new JsonDb(dbFile, {
     playlists: [],
-    settings: { accentColor: "#4f46e5", volumeDefault: 60, youtubeApiKey: "" }
+    settings: {
+      accentColor: "#ff2e97",
+      volumeDefault: 60,
+      youtubeApiKey: "",
+      palette: "miami",
+      language: "es",
+      crossfadeSec: 5,
+      blockAds: true,
+    }
   });
 
   const playlistRepo = new PlaylistRepositoryJson(db);
@@ -68,6 +83,7 @@ export function buildContainer(opts: {
   const archive = new ElectronArchiveAdapter(opts.getWindow);
   const player = new ElectronMediaPlayer(opts.playerView.webContents);
   const auth = new GoogleAuthAdapter(settingsRepo);
+  const downloader = new YtDlpDownloader();
 
   // YouTube search adapter will be initialized with API key from settings
   const youtubeSearch = new YouTubeSearchAdapter(""); // Will be updated via setApiKey
@@ -84,6 +100,12 @@ export function buildContainer(opts: {
         // Don't leak secrets/tokens to the renderer
         const safeSettings = {
           accentColor: settings.accentColor,
+          accentSecondary: settings.accentSecondary,
+          palette: settings.palette,
+          language: settings.language || "es",
+          crossfadeSec: settings.crossfadeSec ?? 0,
+          blockAds: settings.blockAds ?? true,
+          downloadDir: settings.downloadDir,
           volumeDefault: settings.volumeDefault,
           youtubeApiKey: settings.youtubeApiKey,
           googleClientId: settings.googleClientId,
@@ -121,7 +143,15 @@ export function buildContainer(opts: {
       setAccent: new UpdateAccentColor(settingsRepo),
       setVolumeDefault: new UpdateVolumeDefault(settingsRepo),
       setYouTubeApiKey: new UpdateYouTubeApiKey(settingsRepo),
-      setGoogleCredentials: new UpdateGoogleCredentials(settingsRepo)
+      setGoogleCredentials: new UpdateGoogleCredentials(settingsRepo),
+      setCrossfade: new UpdateCrossfade(settingsRepo),
+      setLanguage: new UpdateLanguage(settingsRepo),
+      setTheme: new UpdateTheme(settingsRepo),
+      setBlockAds: new UpdateBlockAds(settingsRepo),
+      setDownloadDir: new UpdateDownloadDir(settingsRepo)
+    },
+    download: {
+      audio: new DownloadAudio(downloader)
     },
     auth: {
       signIn: new SignInGoogle(auth),
@@ -133,5 +163,5 @@ export function buildContainer(opts: {
     ports: { logger, youtubeSearch, auth }
   };
 
-  return { uc, playlistRepo, settingsRepo, queue, player, fileDialog, auth, logger, youtubeSearch };
+  return { uc, playlistRepo, settingsRepo, queue, player, fileDialog, auth, logger, youtubeSearch, downloader };
 }

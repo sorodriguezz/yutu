@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView, session, protocol, ipcMain, net, shell } from "electron";
+import { app, BrowserWindow, WebContentsView, session, protocol, ipcMain, net, shell, nativeImage } from "electron";
 import path from "node:path";
 import http from "node:http";
 import fs from "node:fs";
@@ -7,10 +7,16 @@ import { registerIpc } from "./ipc/registerIpc";
 import { MediaKeysAdapter } from "./infra/system/mediaKeysAdapter";
 import { TrayIconAdapter } from "./infra/system/trayIconAdapter";
 import { AutoUpdaterAdapter } from "./infra/system/autoUpdaterAdapter";
+import { applyAdBlock, AD_SKIP_SCRIPT } from "./infra/system/adblock";
 import { URL } from "url";
 
 let mainWindow: BrowserWindow | null = null;
 let playerView: WebContentsView | null = null;
+let ytmView: WebContentsView | null = null; // YouTube Music embebido
+let ytmVisible = false;
+let ytmLoaded = false;
+let blockAdsEnabled = true;
+const YTM_TOPBAR = 48; // alto de la franja superior de controles de Yutu sobre YT Music
 let httpServer: http.Server | null = null;
 let videoVisible = false; // Start with video visible so it can play
 let mediaKeys: MediaKeysAdapter | null = null;
@@ -126,9 +132,22 @@ function createWindow() {
     callback({ requestHeaders: details.requestHeaders });
   });
 
+  // Ícono de la app (en dev `npm start` macOS usa el de Electron si no se setea).
+  // build/ no se empaqueta en producción, pero ahí electron-builder ya pone el .icns/.ico.
+  const iconPath = path.join(__dirname, "..", "..", "build", "icon.png");
+  let appIcon: Electron.NativeImage | undefined;
+  try {
+    const img = nativeImage.createFromPath(iconPath);
+    if (!img.isEmpty()) appIcon = img;
+  } catch {}
+  if (process.platform === "darwin" && appIcon && app.dock) {
+    app.dock.setIcon(appIcon);
+  }
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 760,
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "preload.js"),
       contextIsolation: true,
@@ -205,8 +224,115 @@ function createWindow() {
     }
   };
 
+  // ───────── Modo YouTube Music embebido (web real + adblock) ─────────
+  ytmView = new WebContentsView({
+    webPreferences: {
+      partition: "persist:ytmusic", // sesión propia y persistente (login)
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
+  });
+  // UA de Chrome de escritorio “limpio” (sin marcador Electron) a nivel de sesión
+  // y de webContents, para que el login de Google lo trate como un navegador normal.
+  const DESKTOP_UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  try { ytmView.webContents.session.setUserAgent(DESKTOP_UA); } catch (e) {}
+  ytmView.webContents.setUserAgent(DESKTOP_UA);
+  // Adblock: filtro de red sobre la sesión de YT Music y la del player (iframe).
+  applyAdBlock(ytmView.webContents.session, () => blockAdsEnabled);
+  applyAdBlock(playerView.webContents.session, () => blockAdsEnabled);
+  // Inyecta el saltador de anuncios al cargar / navegar.
+  const injectAdSkip = () => {
+    if (!ytmView || !blockAdsEnabled) return;
+    ytmView.webContents.executeJavaScript(AD_SKIP_SCRIPT).catch(() => {});
+  };
+  ytmView.webContents.on("dom-ready", injectAdSkip);
+  ytmView.webContents.on("did-navigate-in-page", injectAdSkip);
+  // Enlaces externos (login de Google, etc.) al navegador del sistema.
+  ytmView.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\/(music|www|m)\.youtube\.com\//.test(url) || url.startsWith("https://accounts.google.com")) {
+      return { action: "allow" };
+    }
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+  mainWindow.contentView.addChildView(ytmView);
+  try { ytmView.setVisible(false); } catch (e) {} // oculto hasta que se abra el modo
+
+  const resizeYtm = () => {
+    if (!mainWindow || !ytmView) return;
+    // getContentBounds = área web real (sin la barra de título), para que el player
+    // de YouTube Music no quede cortado por debajo.
+    const b = mainWindow.getContentBounds();
+    if (ytmVisible) {
+      ytmView.setBounds({ x: 0, y: YTM_TOPBAR, width: b.width, height: Math.max(100, b.height - YTM_TOPBAR) });
+    } else {
+      ytmView.setBounds({ x: 0, y: b.height + 200, width: b.width, height: 200 });
+    }
+  };
+
+  const setYtMusic = (visible: boolean) => {
+    ytmVisible = visible;
+    if (visible) {
+      // Pausa el reproductor nativo y ocúltalo para no solapar audio/video.
+      try { playerView?.webContents.send("player:pause"); } catch (e) {}
+      if (playerView && mainWindow) playerView.setBounds({ x: 0, y: mainWindow.getBounds().height + 400, width: 320, height: 180 });
+      if (ytmView && !ytmLoaded) {
+        ytmView.webContents.loadURL("https://music.youtube.com");
+        ytmLoaded = true;
+      }
+      try { ytmView?.setVisible(true); } catch (e) {}
+      resizeYtm();
+      // Trae el view al frente
+      if (mainWindow && ytmView) { mainWindow.contentView.removeChildView(ytmView); mainWindow.contentView.addChildView(ytmView); }
+    } else {
+      // Pausa el audio de YouTube Music al volver a Yutu (evita dos players sonando).
+      try { ytmView?.webContents.executeJavaScript("var v=document.querySelector('video'); if(v) v.pause();").catch(() => {}); } catch (e) {}
+      // Oculta el view de verdad (no basta con moverlo: seguía capturando la vista).
+      try { ytmView?.setVisible(false); } catch (e) {}
+      resizePlayer(); // restaura la posición del player nativo
+    }
+    return ytmVisible;
+  };
+
+  const getYtmCurrentVideoId = async (): Promise<string | null> => {
+    if (!ytmView) return null;
+    try {
+      const id = await ytmView.webContents.executeJavaScript(`(function(){
+        function fromPlayer(){ try { var mp = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
+          if (mp && mp.getVideoData) { var d = mp.getVideoData(); if (d && d.video_id) return d.video_id; } } catch(e){} return null; }
+        function fromUrl(){ try { var v = new URL(location.href).searchParams.get('v'); if (v) return v; } catch(e){} return null; }
+        function fromQueue(){ try {
+          var el = document.querySelector('ytmusic-player-queue-item[selected], ytmusic-player-queue-item[play-button-state="playing"], ytmusic-player-queue-item[play-button-state="paused"]');
+          if (el){ var a = el.querySelector('a[href*="watch?v="]'); if (a){ return new URL(a.href, location.origin).searchParams.get('v'); } }
+        } catch(e){} return null; }
+        return fromPlayer() || fromUrl() || fromQueue() || null;
+      })()`);
+      return id || null;
+    } catch (e) { return null; }
+  };
+
+  const setBlockAds = (enabled: boolean) => {
+    blockAdsEnabled = !!enabled;
+    if (blockAdsEnabled) injectAdSkip();
+    return blockAdsEnabled;
+  };
+
+  // Navegación dentro del modo YT Music (para no quedar atrapado en el login de Google)
+  const ytmHome = () => { try { ytmView?.webContents.loadURL("https://music.youtube.com"); } catch (e) {} };
+  const ytmBack = () => {
+    try {
+      const wc = ytmView?.webContents as any;
+      if (wc?.navigationHistory?.canGoBack?.()) wc.navigationHistory.goBack();
+      else if (wc?.canGoBack?.()) wc.goBack();
+    } catch (e) {}
+  };
+
+  const onResize = () => { resizePlayer(); resizeYtm(); };
   resizePlayer();
-  mainWindow.on("resize", resizePlayer);
+  resizeYtm();
+  mainWindow.on("resize", onResize);
 
   // Handle window close properly
   mainWindow.on("close", (e) => {
@@ -215,6 +341,11 @@ function createWindow() {
       mainWindow.contentView.removeChildView(playerView);
       playerView.webContents.close();
       playerView = null;
+    }
+    if (ytmView && mainWindow) {
+      mainWindow.contentView.removeChildView(ytmView);
+      ytmView.webContents.close();
+      ytmView = null;
     }
   });
 
@@ -237,6 +368,9 @@ function createWindow() {
     playerView
   });
 
+  // Carga la preferencia de adblock guardada.
+  container.settingsRepo.get().then((s) => { blockAdsEnabled = s.blockAds ?? true; }).catch(() => {});
+
   // Register media keys
   mediaKeys = new MediaKeysAdapter(container);
   mediaKeys.register();
@@ -253,6 +387,12 @@ function createWindow() {
     videoVisible = !videoVisible;
     resizePlayer();
     return videoVisible;
+  }, {
+    setYtMusic,
+    getCurrentVideoId: getYtmCurrentVideoId,
+    setBlockAds,
+    home: ytmHome,
+    goBack: ytmBack,
   });
 }
 

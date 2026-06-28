@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('playerApi', {
   onLoad: (callback: (videoId: string) => void) => {
     ipcRenderer.on('player:load', (_, videoId) => callback(videoId));
   },
+  onCrossfade: (callback: (payload: { media: any; durationSec: number }) => void) => {
+    ipcRenderer.on('player:crossfade', (_, payload) => callback(payload));
+  },
   onPlay: (callback: () => void) => {
     ipcRenderer.on('player:play', () => callback());
   },
