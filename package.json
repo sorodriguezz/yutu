@@ -1,18 +1,25 @@
 {
   "name": "yutu",
   "author": "sorodriguezz",
-  "version": "1.0.0",
-  "description": "Aplicación para reproducir musica desde youtube",
+  "version": "2.0.0",
+  "description": "Yutu — reproductor synthwave: música local (MP3/MP4), YouTube y cuenta de Google.",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "tsc && npm run copy:assets",
     "copy:assets": "copyfiles -u 2 \"src/player/player*.html\" \"src/player/player*.js\" dist/player && copyfiles -u 2 \"src/renderer/index.html\" \"src/renderer/styles.css\" \"src/renderer/renderer.js\" dist/renderer",
     "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
   },
   "build": {
-    "appId": "com.sebastian.ytlocalplayer",
-    "productName": "YT Local Player",
+    "appId": "com.sorodriguezz.yutu",
+    "productName": "Yutu",
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
     "files": [
       "dist/**/*"
     ],
@@ -29,27 +36,53 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis"
       ],
       "signAndEditExecutable": false
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
     "mac": {
+      "icon": "build/icon.png",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
       ],
       "category": "public.app-category.music"
     },
+    "dmg": {
+      "title": "Yutu ${version}"
+    },
     "linux": {
+      "icon": "build/icon.png",
       "target": [
         "AppImage",
         "deb"
       ],
-      "category": "Audio"
+      "category": "AudioVideo",
+      "maintainer": "sorodriguezz"
     }
   },
-  "keywords": [],
+  "keywords": [
+    "music",
+    "player",
+    "youtube",
+    "electron",
+    "synthwave"
+  ],
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^25.0.9",
@@ -59,6 +92,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "electron-updater": "^6.7.3"
   }
 }

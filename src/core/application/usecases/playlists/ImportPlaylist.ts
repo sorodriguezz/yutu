@@ -1,31 +1,24 @@
 import { Playlist } from "../../../domain/entities/Playlist";
 import { PlaylistRepository } from "../../ports/PlaylistRepository";
-import { FileDialogPort } from "../../ports/FileDialogPort";
+import { ArchivePort } from "../../ports/ArchivePort";
 
 export class ImportPlaylist {
   constructor(
     private readonly repo: PlaylistRepository,
-    private readonly file: FileDialogPort,
+    private readonly archive: ArchivePort,
     private readonly makeId: () => string
   ) {}
 
   async execute(): Promise<Playlist[]> {
-    const filePath = await this.file.pickImportFile();
-    if (!filePath) return this.repo.getAll();
-
-    const raw = await this.file.readTextFile(filePath);
-    const parsed = JSON.parse(raw) as Playlist;
-
-    if (!parsed?.name || !Array.isArray(parsed?.items)) {
-      return this.repo.getAll();
-    }
+    const imported = await this.archive.importPlaylist();
+    if (!imported) return this.repo.getAll();
 
     const playlists = await this.repo.getAll();
     const now = Date.now();
 
     const newPlaylist: Playlist = {
-      ...parsed,
-      id: playlists.some((p) => p.id === parsed.id) ? this.makeId() : parsed.id,
+      ...imported,
+      id: playlists.some((p) => p.id === imported.id) ? this.makeId() : imported.id,
       updatedAt: now,
     };
 

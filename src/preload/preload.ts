@@ -22,10 +22,23 @@ contextBridge.exposeInMainWorld('api', {
   // YouTube Search
   searchYouTube: (query: string) => ipcRenderer.invoke('youtube:search', query),
 
+  // Local files
+  addLocalFiles: () => ipcRenderer.invoke('local:pickAndEnqueue'),
+
+  // Google account / auth
+  signInGoogle: () => ipcRenderer.invoke('auth:signIn'),
+  signOutGoogle: () => ipcRenderer.invoke('auth:signOut'),
+  getAuthProfile: () => ipcRenderer.invoke('auth:getProfile'),
+  listYouTubePlaylists: () => ipcRenderer.invoke('auth:listYouTubePlaylists'),
+  importYouTubePlaylist: (playlistId: string, name: string) =>
+    ipcRenderer.invoke('auth:importYouTubePlaylist', playlistId, name),
+  setGoogleCredentials: (clientId: string, clientSecret: string) =>
+    ipcRenderer.invoke('settings:setGoogleCredentials', clientId, clientSecret),
+
   // Playlists
   createPlaylist: (name: string) => ipcRenderer.invoke('playlist:create', name),
   deletePlaylist: (id: string) => ipcRenderer.invoke('playlist:delete', id),
-  addTrackToPlaylist: (playlistId: string, track: { videoId: string; title?: string }) => 
+  addTrackToPlaylist: (playlistId: string, track: any) =>
     ipcRenderer.invoke('playlist:addTrack', playlistId, track),
   removeTrackFromPlaylist: (playlistId: string, trackId: string) =>
     ipcRenderer.invoke('playlist:removeTrack', playlistId, trackId),

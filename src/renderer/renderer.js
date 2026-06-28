@@ -1,1085 +1,59 @@
-// Renderer process - UI logic
+// ════════════════════════════════════════════════════════════
+// YUTU · Synthwave Player — renderer logic
+// ════════════════════════════════════════════════════════════
 
 let state = {
   playlists: [],
-  settings: { accentColor: '#1db954', volumeDefault: 60 },
+  settings: { accentColor: '#ff2e97', volumeDefault: 60 },
   queue: { items: [], currentIndex: -1, shuffle: false, repeat: 'off' },
   playback: { isPlaying: false, currentTime: 0, duration: 0 },
-  videoVisible: true, // Start visible
-  selectedPlaylist: null, // Currently viewed playlist
-  viewMode: 'queue' // 'queue' or 'playlist'
+  profile: null,
+  videoVisible: false,
+  selectedPlaylist: null,
+  viewMode: 'queue'
 };
 
-// Mute state
 let isMuted = false;
 let volumeBeforeMute = 60;
-
-// === HELPER: CALCULATE LUMINANCE AND CONTRAST ===
-function getLuminance(hex) {
-  // Convert hex to RGB
-  const rgb = parseInt(hex.slice(1), 16);
-  const r = (rgb >> 16) & 0xff;
-  const g = (rgb >> 8) & 0xff;
-  const b = (rgb >> 0) & 0xff;
-  
-  // Convert to relative luminance
-  const rsRGB = r / 255;
-  const gsRGB = g / 255;
-  const bsRGB = b / 255;
-  
-  const rLinear = rsRGB <= 0.03928 ? rsRGB / 12.92 : Math.pow((rsRGB + 0.055) / 1.055, 2.4);
-  const gLinear = gsRGB <= 0.03928 ? gsRGB / 12.92 : Math.pow((gsRGB + 0.055) / 1.055, 2.4);
-  const bLinear = bsRGB <= 0.03928 ? bsRGB / 12.92 : Math.pow((bsRGB + 0.055) / 1.055, 2.4);
-  
-  return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
-}
-
-function getContrastTextColor(backgroundColor) {
-  const luminance = getLuminance(backgroundColor);
-  // If luminance > 0.5, color is light, use black text
-  // Otherwise use white text
-  return luminance > 0.5 ? '#000000' : '#ffffff';
-}
-
-function updateAccentTextColor(accentColor) {
-  const textColor = getContrastTextColor(accentColor);
-  document.documentElement.style.setProperty('--accent-text', textColor);
-}
-
-// Track last queue state to avoid unnecessary re-renders
 let lastQueueHash = '';
-function getQueueHash(queue) {
+let isSeeking = false;
+
+// Signature of the queue so the 1s background sync doesn't re-render
+// (and destroy open dropdowns) when nothing actually changed.
+function queueHash(q) {
   return JSON.stringify({
-    items: queue.items.map(t => t.videoId),
-    index: queue.currentIndex,
-    shuffle: queue.shuffle,
-    repeat: queue.repeat
+    ids: (q.items || []).map(t => t.id),
+    i: q.currentIndex,
+    sh: q.shuffle,
+    rp: q.repeat
   });
 }
 
-// Cache for video metadata to avoid repeated fetches
-const metadataCache = new Map();
+// ─── helpers ───────────────────────────────────────────────
+function $(id) { return document.getElementById(id); }
 
-// Debounce utility to prevent rapid re-renders
-let renderTimeout = null;
-function debouncedRender() {
-  if (renderTimeout) clearTimeout(renderTimeout);
-  renderTimeout = setTimeout(() => {
-    render();
-  }, 100);
-}
-
-// === HELPER: FETCH VIDEO METADATA ===
-async function fetchVideoMetadata(videoId) {
-  // Check cache first
-  if (metadataCache.has(videoId)) {
-    return metadataCache.get(videoId);
-  }
-  
-  try {
-    // Use YouTube oEmbed API (no API key required)
-    const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch video metadata');
-    }
-    const data = await response.json();
-    const metadata = {
-      title: data.title,
-      author: data.author_name
-    };
-    metadataCache.set(videoId, metadata);
-    return metadata;
-  } catch (err) {
-    const fallback = { title: videoId, author: 'YouTube' };
-    metadataCache.set(videoId, fallback);
-    return fallback;
-  }
-}
-
-// Fetch metadata for multiple tracks in parallel (limited concurrency)
-async function fetchMetadataForTracks(tracks) {
-  // First, apply cached metadata to tracks that don't have titles
-  for (const track of tracks) {
-    if ((!track.title || track.title === track.videoId) && metadataCache.has(track.videoId)) {
-      const cached = metadataCache.get(track.videoId);
-      track.title = cached.title;
-      track.author = cached.author;
-    }
-  }
-  
-  // Find tracks that still need fetching
-  const needsFetch = tracks.filter(t => 
-    (!t.title || t.title === t.videoId) && !metadataCache.has(t.videoId)
-  );
-  
-  if (needsFetch.length === 0) return;
-  
-  // Fetch in parallel with limit of 3 concurrent requests
-  const batchSize = 3;
-  for (let i = 0; i < needsFetch.length; i += batchSize) {
-    const batch = needsFetch.slice(i, i + batchSize);
-    await Promise.all(batch.map(async (track) => {
-      const metadata = await fetchVideoMetadata(track.videoId);
-      track.title = metadata.title;
-      track.author = metadata.author;
-    }));
-  }
-}
-
-// Update track titles in the DOM without full re-render
-function updateTrackTitles() {
-  const items = document.querySelectorAll('.queue-item');
-  items.forEach((item, i) => {
-    if (state.queue.items[i]) {
-      const track = state.queue.items[i];
-      const titleEl = item.querySelector('.queue-item-title');
-      const metaEl = item.querySelector('.queue-item-meta');
-      if (titleEl && track.title) {
-        titleEl.textContent = track.title;
-      }
-      if (metaEl && track.author) {
-        metaEl.textContent = track.author;
-      }
-    }
-  });
-  // Also update player bar
-  updateNowPlaying();
-  updatePlayerBarInfo();
-}
-
-// Make functions globally available for onclick handlers
-window.createPlaylist = async function() {
-  const input = document.getElementById('newPlaylistName');
-  if (!input) return;
-  
-  const name = input.value.trim();
-  if (!name) return;
-
-  try {
-    await window.api.createPlaylist(name);
-    input.value = '';
-    await loadState();
-    render();
-    showToast('✅ Playlist creada');
-  } catch (err) {
-    showToast('❌ Error al crear playlist: ' + err.message);
-  }
+// ─── SVG line icons (currentColor, estilo del resto de la UI) ──
+const ICONS = {
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  film: '<rect x="2.5" y="3.5" width="19" height="17" rx="2"/><line x1="7" y1="3.5" x2="7" y2="20.5"/><line x1="17" y1="3.5" x2="17" y2="20.5"/><line x1="2.5" y1="12" x2="21.5" y2="12"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  play: '<polygon points="6 4 20 12 6 20" fill="currentColor" stroke="none"/>',
+  back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+  folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  warning: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
 };
-
-window.importPlaylist = async function() {
-  try {
-    await window.api.importPlaylist();
-    await loadState();
-    render();
-    showToast('✅ Playlist importada');
-  } catch (err) {
-    showToast('❌ Error al importar: ' + err.message);
-  }
-};
-
-window.deletePlaylist = async function(id) {
-  showConfirm('¿Eliminar esta playlist?', async () => {
-    try {
-      await window.api.deletePlaylist(id);
-      await loadState();
-      render();
-      showToast('✅ Playlist eliminada');
-    } catch (err) {
-      showToast('❌ Error al eliminar: ' + err.message);
-    }
-  });
-};
-
-window.enqueuePlaylist = async function(id) {
-  try {
-    await window.api.enqueuePlaylist(id);
-    showToast('✅ Playlist agregada a la cola');
-  } catch (err) {
-    showToast('❌ Error al encolar playlist: ' + err.message);
-  }
-};
-
-// Open playlist view
-window.openPlaylist = function(id) {
-  const playlist = state.playlists.find(p => p.id === id);
-  if (playlist) {
-    state.selectedPlaylist = playlist;
-    state.viewMode = 'playlist';
-    render();
-  }
-};
-
-// Back to queue view
-window.backToQueue = function() {
-  state.selectedPlaylist = null;
-  state.viewMode = 'queue';
-  render();
-};
-
-// Play track from playlist view - replaces queue with playlist and starts at trackIndex
-window.playFromPlaylist = async function(playlistId, trackIndex) {
-  try {
-    // This replaces the queue with the playlist and sets the starting index
-    await window.api.enqueuePlaylist(playlistId, trackIndex);
-    // Play the track at the specified index
-    await window.api.playAtIndex(trackIndex);
-    // Switch to queue view
-    backToQueue();
-  } catch (err) {
-    alert('Error al reproducir: ' + err.message);
-  }
-};
-
-// Remove track from queue
-window.removeFromQueue = async function(index) {
-  try {
-    // Remove from state and update
-    state.queue.items.splice(index, 1);
-    // Adjust current index if needed
-    if (state.queue.currentIndex >= index && state.queue.currentIndex > 0) {
-      state.queue.currentIndex--;
-    }
-    renderQueue();
-    updateNowPlaying();
-    updatePlayerBarInfo();
-  } catch (err) {
-    showToast('❌ Error al eliminar de la cola: ' + err.message);
-  }
-};
-
-// Copy YouTube link to clipboard
-window.copyYoutubeLink = async function(videoId) {
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-  try {
-    await navigator.clipboard.writeText(url);
-    // Mostrar feedback visual temporal
-    showToast('Link copiado al portapapeles');
-  } catch (err) {
-    // Fallback para navegadores que no soportan clipboard API
-    const textArea = document.createElement('textarea');
-    textArea.value = url;
-    document.body.appendChild(textArea);
-    textArea.select();
-    document.execCommand('copy');
-    document.body.removeChild(textArea);
-    showToast('Link copiado al portapapeles');
-  }
-};
-
-// Show toast notification
-function showToast(message) {
-  // Remover toast existente si hay uno
-  const existingToast = document.querySelector('.toast-notification');
-  if (existingToast) existingToast.remove();
-  
-  const toast = document.createElement('div');
-  toast.className = 'toast-notification';
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  
-  // Animar entrada
-  setTimeout(() => toast.classList.add('show'), 10);
-  
-  // Remover después de 3 segundos
-  setTimeout(() => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
+function icon(name, size) {
+  size = size || 16;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
 }
 
-function showConfirm(message, onConfirm, onCancel) {
-  const existingConfirm = document.querySelector('.confirm-modal');
-  if (existingConfirm) existingConfirm.remove();
-  
-  const modal = document.createElement('div');
-  modal.className = 'modal confirm-modal';
-  modal.innerHTML = `
-    <div class="modal-content confirm-content">
-      <div class="confirm-icon">⚠️</div>
-      <div class="confirm-message">${message}</div>
-      <div class="confirm-actions">
-        <button class="btn-confirm-cancel">Cancelar</button>
-        <button class="btn-confirm-ok">Aceptar</button>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  setTimeout(() => modal.classList.remove('hidden'), 10);
-  
-  const btnCancel = modal.querySelector('.btn-confirm-cancel');
-  const btnOk = modal.querySelector('.btn-confirm-ok');
-  
-  btnCancel.onclick = () => {
-    modal.remove();
-    if (onCancel) onCancel();
-  };
-  
-  btnOk.onclick = () => {
-    modal.remove();
-    if (onConfirm) onConfirm();
-  };
-  
-  modal.onclick = (e) => {
-    if (e.target === modal) {
-      modal.remove();
-      if (onCancel) onCancel();
-    }
-  };
-}
-
-// Remove track from playlist
-window.removeFromPlaylist = async function(playlistId, trackId) {
-  try {
-    await window.api.removeTrackFromPlaylist(playlistId, trackId);
-    await loadState();
-    // Update selected playlist if still viewing it
-    if (state.selectedPlaylist && state.selectedPlaylist.id === playlistId) {
-      state.selectedPlaylist = state.playlists.find(p => p.id === playlistId);
-    }
-    render();
-    showToast('✅ Canción eliminada de la playlist');
-  } catch (err) {
-    showToast('❌ Error al eliminar de playlist: ' + err.message);
-  }
-};
-
-window.exportPlaylist = async function(id) {
-  try {
-    await window.api.exportPlaylist(id);
-    showToast('✅ Playlist exportada');
-  } catch (err) {
-    showToast('❌ Error al exportar: ' + err.message);
-  }
-};
-
-window.addTrackToPlaylist = async function(trackIndex, playlistId) {
-  const track = state.queue.items[trackIndex];
-  if (!track || !playlistId) return;
-
-  try {
-    await window.api.addTrackToPlaylist(playlistId, {
-      videoId: track.videoId,
-      title: track.title || track.videoId
-    });
-    await loadState();
-    render();
-    showToast('✅ Agregado a playlist');
-  } catch (err) {
-    showToast('❌ Error al agregar a playlist: ' + err.message);
-  }
-};
-
-window.playAtIndex = async function(index) {
-  try {
-    await window.api.playAtIndex(index);
-  } catch (err) {
-    showToast('❌ Error al reproducir: ' + err.message);
-  }
-};
-
-window.toggleSettings = function() {
-  const panel = document.getElementById('settingsPanel');
-  if (panel) {
-    panel.classList.toggle('hidden');
-  }
-};
-
-// === ADD TO PLAYLIST MODAL ===
-let pendingTrackForPlaylist = null;
-
-window.showAddToPlaylistModal = function(track) {
-  pendingTrackForPlaylist = track;
-  const modal = document.getElementById('addToPlaylistModal');
-  const trackName = document.getElementById('addedTrackName');
-  const playlistOptions = document.getElementById('playlistOptions');
-  
-  if (!modal) return;
-  
-  if (trackName) {
-    trackName.textContent = track.title || track.videoId;
-  }
-  
-  if (playlistOptions) {
-    if (state.playlists.length === 0) {
-      playlistOptions.innerHTML = '<p class="no-playlists">No tienes playlists. Crea una primero.</p>';
-    } else {
-      playlistOptions.innerHTML = state.playlists.map(pl => `
-        <div class="playlist-option" onclick="addPendingTrackToPlaylist('${pl.id}')">
-          <span class="playlist-option-icon">🎵</span>
-          <span class="playlist-option-name">${escapeHtml(pl.name)}</span>
-        </div>
-      `).join('');
-    }
-  }
-  
-  modal.classList.remove('hidden');
-};
-
-window.closeAddToPlaylistModal = function() {
-  const modal = document.getElementById('addToPlaylistModal');
-  if (modal) {
-    modal.classList.add('hidden');
-  }
-  pendingTrackForPlaylist = null;
-};
-
-window.addPendingTrackToPlaylist = async function(playlistId) {
-  if (!pendingTrackForPlaylist) return;
-  
-  try {
-    await window.api.addTrackToPlaylist(playlistId, {
-      videoId: pendingTrackForPlaylist.videoId,
-      title: pendingTrackForPlaylist.title || pendingTrackForPlaylist.videoId
-    });
-    await loadState();
-    render();
-    closeAddToPlaylistModal();
-    showToast('✅ Agregado a playlist');
-  } catch (err) {
-    showToast('❌ Error al agregar a playlist: ' + err.message);
-  }
-};
-
-window.togglePlayPause = async function() {
-  const result = await window.api.playPause();
-  if (result && result.isPlaying !== undefined) {
-    state.playback.isPlaying = result.isPlaying;
-    updatePlayPauseButton();
-  }
-};
-
-// === INITIALIZATION ===
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadState();
-  setupEventListeners();
-  render();
-  startProgressUpdate();
-});
-
-async function loadState() {
-  try {
-    const data = await window.api.getState();
-    state.playlists = data.playlists || [];
-    state.settings = data.settings || state.settings;
-    
-    const queueData = data.queue || { queue: [], index: -1, shuffle: false, repeat: 'off' };
-    state.queue = {
-      items: queueData.queue || [],
-      currentIndex: queueData.index !== undefined ? queueData.index : -1,
-      shuffle: queueData.shuffle || false,
-      repeat: queueData.repeat || 'off'
-    };
-    
-    // Fetch metadata in background (don't block, don't re-render whole queue)
-    fetchMetadataForTracks(state.queue.items).then(() => {
-      // Just update the text content of existing elements instead of full re-render
-      updateTrackTitles();
-    });
-    
-    document.documentElement.style.setProperty('--accent', state.settings.accentColor);
-    updateAccentTextColor(state.settings.accentColor);
-    
-    // Initialize settings UI with saved values
-    initializeSettingsUI();
-  } catch (err) {}
-}
-
-// Initialize settings panel with saved values
-function initializeSettingsUI() {
-  const accentColor = document.getElementById('accentColor');
-  const volumeDefault = document.getElementById('volumeDefault');
-  const volumeDefaultLabel = document.getElementById('volumeDefaultLabel');
-  const colorPreview = document.getElementById('colorPreview');
-  const youtubeApiKey = document.getElementById('youtubeApiKey');
-  
-  if (accentColor) {
-    accentColor.value = state.settings.accentColor;
-  }
-  
-  if (colorPreview) {
-    colorPreview.style.background = state.settings.accentColor;
-  }
-  
-  if (volumeDefault) {
-    volumeDefault.value = state.settings.volumeDefault;
-    updateSliderBackground(volumeDefault, state.settings.volumeDefault, 100);
-  }
-  
-  if (volumeDefaultLabel) {
-    volumeDefaultLabel.textContent = state.settings.volumeDefault;
-  }
-
-  // Initialize YouTube API Key field (show masked value if exists)
-  if (youtubeApiKey && state.settings.youtubeApiKey) {
-    youtubeApiKey.value = state.settings.youtubeApiKey;
-    youtubeApiKey.placeholder = '••••••••••••••••••••••••';
-  }
-  
-  // Inicializar el slider de volumen del reproductor con el valor guardado
-  const volumeSlider = document.getElementById('volume');
-  const volumeLabel = document.getElementById('volumeLabel');
-  const savedVolume = state.settings.volumeDefault;
-  
-  if (volumeSlider) {
-    volumeSlider.value = savedVolume;
-    updateSliderBackground(volumeSlider, savedVolume, 100);
-  }
-  
-  if (volumeLabel) {
-    volumeLabel.textContent = savedVolume;
-  }
-  
-  // Enviar el volumen al player
-  window.api.setVolume(savedVolume);
-  
-  // Actualizar volumeBeforeMute con el valor guardado
-  volumeBeforeMute = savedVolume;
-}
-
-// === EVENT LISTENERS ===
-function setupEventListeners() {
-  // Search bar
-  const searchInput = document.getElementById('ytInput');
-  if (searchInput) {
-    searchInput.onkeypress = (e) => {
-      if (e.key === 'Enter') window.addToQueue();
-    };
-  }
-
-  // Settings panel
-  const btnSettings = document.getElementById('btnSettings');
-  if (btnSettings) {
-    btnSettings.onclick = () => {
-      document.getElementById('settingsPanel').classList.toggle('hidden');
-    };
-  }
-
-  // Video toggle
-  const btnToggleVideo = document.getElementById('btnToggleVideo');
-  if (btnToggleVideo) {
-    btnToggleVideo.onclick = toggleVideo;
-  }
-
-  // Delegated event listener for add-to-playlist selects
-  document.addEventListener('change', async (e) => {
-    if (e.target.classList.contains('add-to-playlist-select')) {
-      const trackIndex = parseInt(e.target.dataset.trackIndex);
-      const playlistId = e.target.value;
-      if (playlistId) {
-        await window.addTrackToPlaylist(trackIndex, playlistId);
-        e.target.value = ''; // Reset after adding
-      }
-    }
-  });
-
-  // Player controls
-  const btnPlayPause = document.getElementById('btnPlayPause');
-  const btnNext = document.getElementById('btnNext');
-  const btnPrev = document.getElementById('btnPrev');
-  const btnShuffle = document.getElementById('btnShuffle');
-  const btnRepeat = document.getElementById('btnRepeat');
-
-  if (btnPlayPause) btnPlayPause.onclick = () => window.api.playPause();
-  if (btnNext) btnNext.onclick = () => window.api.next();
-  if (btnPrev) btnPrev.onclick = () => window.api.prev();
-  if (btnShuffle) btnShuffle.onclick = toggleShuffle;
-  if (btnRepeat) btnRepeat.onclick = cycleRepeat;
-
-  // Volume
-  const volumeSlider = document.getElementById('volume');
-  if (volumeSlider) {
-    volumeSlider.oninput = (e) => {
-      const vol = parseInt(e.target.value);
-      const volumeLabel = document.getElementById('volumeLabel');
-      if (volumeLabel) volumeLabel.textContent = vol;
-      updateSliderBackground(volumeSlider, vol, 100);
-      window.api.setVolume(vol);
-      
-      // Si cambiamos el volumen manualmente, desactivar mute
-      if (isMuted && vol > 0) {
-        isMuted = false;
-        updateMuteUI();
-      }
-    };
-    // Initialize volume slider background (will be updated by initializeSettingsUI)
-    updateSliderBackground(volumeSlider, state.settings.volumeDefault, 100);
-  }
-
-  // Mute button
-  const btnMute = document.getElementById('btnMute');
-  if (btnMute) {
-    btnMute.onclick = () => {
-      const volumeSlider = document.getElementById('volume');
-      const volumeLabel = document.getElementById('volumeLabel');
-      
-      if (isMuted) {
-        // Unmute: restaurar volumen anterior
-        isMuted = false;
-        if (volumeSlider) {
-          volumeSlider.value = volumeBeforeMute;
-          updateSliderBackground(volumeSlider, volumeBeforeMute, 100);
-        }
-        if (volumeLabel) volumeLabel.textContent = volumeBeforeMute;
-        window.api.setVolume(volumeBeforeMute);
-      } else {
-        // Mute: guardar volumen actual y poner en 0
-        volumeBeforeMute = volumeSlider ? parseInt(volumeSlider.value) : 60;
-        isMuted = true;
-        if (volumeSlider) {
-          volumeSlider.value = 0;
-          updateSliderBackground(volumeSlider, 0, 100);
-        }
-        if (volumeLabel) volumeLabel.textContent = '0';
-        window.api.setVolume(0);
-      }
-      updateMuteUI();
-    };
-  }
-
-  // Progress/Seek
-  const progressSlider = document.getElementById('progress');
-  if (progressSlider) {
-    progressSlider.onchange = (e) => {
-      if (state.playback.duration > 0) {
-        const pos = (parseInt(e.target.value) / 1000) * state.playback.duration;
-        window.api.seek(pos);
-      }
-    };
-  }
-
-  // Settings
-  const accentColor = document.getElementById('accentColor');
-  const volumeDefault = document.getElementById('volumeDefault');
-
-  if (accentColor) {
-    accentColor.onchange = async (e) => {
-      const color = e.target.value;
-      document.documentElement.style.setProperty('--accent', color);
-      updateAccentTextColor(color);
-      const colorPreview = document.getElementById('colorPreview');
-      if (colorPreview) colorPreview.style.background = color;
-      await window.api.setAccentColor(color);
-      state.settings.accentColor = color;
-    };
-  }
-
-  if (volumeDefault) {
-    volumeDefault.oninput = async (e) => {
-      const vol = parseInt(e.target.value);
-      const volumeDefaultLabel = document.getElementById('volumeDefaultLabel');
-      if (volumeDefaultLabel) volumeDefaultLabel.textContent = vol;
-      updateSliderBackground(volumeDefault, vol, 100);
-      await window.api.setVolumeDefault(vol);
-      state.settings.volumeDefault = vol;
-    };
-  }
-
-  // Listen to player events
-  window.api.onPlayerState((newState) => {
-    state.playback.isPlaying = newState === 'playing';
-    updatePlayPauseButton();
-  });
-
-  window.api.onTimeUpdate((data) => {
-    state.playback.currentTime = data.current;
-    state.playback.duration = data.duration;
-  });
-
-  window.api.onQueueUpdate(async (queue) => {
-    const newQueue = {
-      items: queue.queue || [],
-      currentIndex: queue.index !== undefined ? queue.index : -1,
-      shuffle: queue.shuffle || false,
-      repeat: queue.repeat || 'off'
-    };
-    
-    const newHash = getQueueHash(newQueue);
-    const queueChanged = newHash !== lastQueueHash;
-    
-    // Only update state and render if queue actually changed
-    if (queueChanged) {
-      lastQueueHash = newHash;
-      state.queue = newQueue;
-      
-      if (state.viewMode === 'queue') {
-        renderQueue();
-      }
-      
-      // Fetch metadata in background without re-rendering
-      fetchMetadataForTracks(state.queue.items).then(() => {
-        updateTrackTitles();
-      });
-    }
-    
-    // Always update now playing info (for current index changes)
-    updateNowPlaying();
-    updatePlayerBarInfo();
-  });
-}
-
-// === VIDEO TOGGLE ===
-async function toggleVideo() {
-  state.videoVisible = !state.videoVisible;
-  try {
-    await window.api.toggleVideo(state.videoVisible);
-    const icon = document.getElementById('btnToggleVideo').querySelector('svg');
-    icon.innerHTML = state.videoVisible 
-      ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>'
-      : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
-  } catch (err) {}
-}
-
-// === ADD TO QUEUE ===
-window.addToQueue = async function() {
-  const input = document.getElementById('ytInput');
-  if (!input) {
-    showToast('❌ No se encontró el campo de búsqueda');
-    return;
-  }
-  
-  const value = input.value.trim();
-  if (!value) {
-    showToast('⚠️ Por favor ingresa una URL o ID de video');
-    return;
-  }
-
-  try {
-    const wasEmpty = state.queue.items.length === 0;
-    await window.api.enqueueTrack(value);
-    input.value = '';
-    
-    // Wait for queue to update, then get the added track and show modal
-    setTimeout(async () => {
-      // Get the last added track
-      const addedTrack = state.queue.items[state.queue.items.length - 1];
-      
-      // Fetch metadata for the track if not available
-      if (addedTrack && (!addedTrack.title || addedTrack.title === addedTrack.videoId)) {
-        const metadata = await fetchVideoMetadata(addedTrack.videoId);
-        addedTrack.title = metadata.title;
-        addedTrack.author = metadata.author;
-      }
-      
-      // Show modal to optionally add to playlist
-      if (addedTrack && state.playlists.length > 0) {
-        showAddToPlaylistModal(addedTrack);
-      }
-      
-      // Auto-play if queue was empty before adding
-      if (wasEmpty) {
-        await window.api.playAtIndex(0);
-      }
-    }, 500);
-  } catch (err) {
-    showToast('❌ Error al agregar: ' + err.message);
-  }
-};
-
-// === SHUFFLE & REPEAT ===
-async function toggleShuffle() {
-  await window.api.toggleShuffle();
-  state.queue.shuffle = !state.queue.shuffle;
-  renderShuffleButton();
-}
-
-async function cycleRepeat() {
-  await window.api.cycleRepeat();
-  const modes = ['off', 'all', 'one'];
-  const idx = modes.indexOf(state.queue.repeat);
-  state.queue.repeat = modes[(idx + 1) % 3];
-  renderRepeatButton();
-}
-
-function renderShuffleButton() {
-  const btn = document.getElementById('btnShuffle');
-  if (btn) btn.classList.toggle('active', state.queue.shuffle);
-}
-
-function renderRepeatButton() {
-  const btn = document.getElementById('btnRepeat');
-  if (!btn) return;
-  
-  btn.classList.toggle('active', state.queue.repeat !== 'off');
-  const svg = btn.querySelector('svg');
-  if (!svg) return;
-  
-  if (state.queue.repeat === 'one') {
-    svg.innerHTML = '<path d="M17 2l4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="M7 22l-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path><text x="12" y="16" font-size="8" text-anchor="middle" fill="currentColor">1</text>';
-  } else {
-    svg.innerHTML = '<path d="M17 2l4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="M7 22l-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path>';
-  }
-}
-
-function updatePlayPauseButton() {
-  const playIcon = document.getElementById('playIcon');
-  const pauseIcon = document.getElementById('pauseIcon');
-  
-  if (playIcon && pauseIcon) {
-    if (state.playback.isPlaying) {
-      playIcon.style.display = 'none';
-      pauseIcon.style.display = 'block';
-    } else {
-      playIcon.style.display = 'block';
-      pauseIcon.style.display = 'none';
-    }
-  }
-}
-
-// === SLIDER BACKGROUND UPDATE ===
-function updateSliderBackground(slider, value, max) {
-  const percent = (value / max) * 100;
-  slider.style.background = `linear-gradient(to right, var(--accent) ${percent}%, var(--border-subtle) ${percent}%)`;
-}
-
-// === MUTE UI UPDATE ===
-function updateMuteUI() {
-  const volumeIcon = document.getElementById('volumeIcon');
-  const muteIcon = document.getElementById('muteIcon');
-  const btnMute = document.getElementById('btnMute');
-  
-  if (volumeIcon && muteIcon) {
-    if (isMuted) {
-      volumeIcon.style.display = 'none';
-      muteIcon.style.display = 'block';
-      if (btnMute) btnMute.title = 'Activar sonido';
-    } else {
-      volumeIcon.style.display = 'block';
-      muteIcon.style.display = 'none';
-      if (btnMute) btnMute.title = 'Silenciar';
-    }
-  }
-}
-
-// === RENDER ===
-function render() {
-  renderPlaylists();
-  
-  // Render either playlist view or queue view based on mode
-  if (state.viewMode === 'playlist' && state.selectedPlaylist) {
-    renderPlaylistView();
-  } else {
-    renderQueue();
-  }
-  
-  renderShuffleButton();
-  renderRepeatButton();
-  updateNowPlaying();
-  updatePlayerBarInfo();
-}
-
-function renderPlaylists() {
-  const container = document.getElementById('playlistList');
-  if (!container) return;
-  
-  if (!state.playlists.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">📁</div>
-        <div class="empty-state-text">No hay playlists</div>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = state.playlists.map(pl => {
-    return `
-    <div class="playlist-item" onclick="openPlaylist('${pl.id}')">
-      <div class="playlist-cover">🎵</div>
-      <div class="playlist-details">
-        <div class="playlist-name">${escapeHtml(pl.name)}</div>
-        <div class="playlist-meta">${pl.items.length} canciones</div>
-      </div>
-      <div class="playlist-actions">
-        <button onclick="event.stopPropagation(); exportPlaylist('${pl.id}')" title="Exportar">⬇</button>
-        <button onclick="event.stopPropagation(); deletePlaylist('${pl.id}')" title="Eliminar">🗑</button>
-      </div>
-    </div>
-  `;
-  }).join('');
-}
-
-// Render playlist view (when a playlist is selected)
-function renderPlaylistView() {
-  const container = document.getElementById('queueItems');
-  const count = document.getElementById('queueCount');
-  const title = document.querySelector('.queue-section h2');
-  
-  const pl = state.selectedPlaylist;
-  if (!pl) return;
-  
-  // Update title
-  if (title) {
-    title.innerHTML = `<button class="back-btn" onclick="backToQueue()" title="Volver">←</button> ${escapeHtml(pl.name)}`;
-  }
-  
-  if (count) {
-    count.textContent = `${pl.items.length} ${pl.items.length === 1 ? 'canción' : 'canciones'}`;
-  }
-
-  if (!container) return;
-
-  if (!pl.items.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">📁</div>
-        <div class="empty-state-text">Playlist vacía. Agrega canciones desde la cola.</div>
-      </div>
-      <button class="play-all-btn" onclick="backToQueue()">← Volver a la cola</button>
-    `;
-    return;
-  }
-
-  container.innerHTML = `
-    <div class="playlist-header-actions">
-      <button class="play-all-btn" onclick="playFromPlaylist('${pl.id}', 0)">▶ Reproducir todo</button>
-    </div>
-    ${pl.items.map((track, i) => `
-      <div class="queue-item" onclick="playFromPlaylist('${pl.id}', ${i})" style="cursor: pointer;">
-        <div class="queue-item-index">${i + 1}</div>
-        <div class="queue-item-info">
-          <div class="queue-item-title">${escapeHtml(track.title || track.videoId)}</div>
-          <div class="queue-item-meta">YouTube</div>
-        </div>
-        <div class="queue-item-actions">
-          <button onclick="event.stopPropagation(); removeFromPlaylist('${pl.id}', '${track.id}')" title="Eliminar de playlist">🗑</button>
-        </div>
-      </div>
-    `).join('')}
-  `;
-}
-
-function renderQueue() {
-  const container = document.getElementById('queueItems');
-  const count = document.getElementById('queueCount');
-  const title = document.querySelector('.queue-section h2');
-  
-  // Reset title to queue
-  if (title && !title.textContent.includes('Cola')) {
-    title.innerHTML = 'Cola de reproducción';
-  }
-  
-  if (count) {
-    count.textContent = `${state.queue.items.length} ${state.queue.items.length === 1 ? 'canción' : 'canciones'}`;
-  }
-
-  if (!container) return;
-
-  if (!state.queue.items.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">🎵</div>
-        <div class="empty-state-text">Cola vacía. Busca y agrega videos para comenzar.</div>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = state.queue.items.map((track, i) => {
-    const isActive = i === state.queue.currentIndex;
-    const playlistOptions = state.playlists.map(pl => 
-      `<option value="${pl.id}">${escapeHtml(pl.name)}</option>`
-    ).join('');
-
-    const displayTitle = track.title || track.videoId;
-    const displayAuthor = track.author || 'YouTube';
-
-    return `
-      <div class="queue-item ${isActive ? 'active' : ''}" onclick="playAtIndex(${i})">
-        <div class="queue-item-index">${isActive ? '▶' : i + 1}</div>
-        <div class="queue-item-info">
-          <div class="queue-item-title">${escapeHtml(displayTitle)}</div>
-          <div class="queue-item-meta">${escapeHtml(displayAuthor)}</div>
-        </div>
-        <div class="queue-item-actions">
-          <button class="copy-link-btn" onclick="event.stopPropagation(); copyYoutubeLink('${track.videoId}')" title="Copiar link de YouTube">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-          </button>
-          ${state.playlists.length > 0 ? `
-            <select class="add-to-playlist-select" data-track-index="${i}" onclick="event.stopPropagation();">
-              <option value="">+ Playlist</option>
-              ${playlistOptions}
-            </select>
-          ` : ''}
-          <button class="remove-btn" onclick="event.stopPropagation(); removeFromQueue(${i})" title="Eliminar de cola">✕</button>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function updateNowPlaying() {
-  const titleEl = document.getElementById('trackTitle');
-  const artistEl = document.getElementById('trackArtist');
-
-  if (state.queue.currentIndex >= 0 && state.queue.items[state.queue.currentIndex]) {
-    const track = state.queue.items[state.queue.currentIndex];
-    if (titleEl) titleEl.textContent = track.title || track.videoId;
-    if (artistEl) artistEl.textContent = track.author || 'YouTube';
-  } else {
-    if (titleEl) titleEl.textContent = 'Sin reproducción';
-    if (artistEl) artistEl.textContent = 'Agrega un video a la cola para comenzar';
-  }
-}
-
-function updatePlayerBarInfo() {
-  const nameEl = document.getElementById('playerTrackName');
-  const metaEl = document.getElementById('playerTrackMeta');
-  const thumbImg = document.getElementById('playerThumbImg');
-  const thumbIcon = document.getElementById('playerThumbIcon');
-
-  if (state.queue.currentIndex >= 0 && state.queue.items[state.queue.currentIndex]) {
-    const track = state.queue.items[state.queue.currentIndex];
-    if (nameEl) nameEl.textContent = track.title || track.videoId;
-    if (metaEl) metaEl.textContent = track.author || 'YouTube';
-    
-    // Mostrar thumbnail si está disponible
-    if (track.thumbnail || track.videoId) {
-      const thumbnailUrl = track.thumbnail || `https://img.youtube.com/vi/${track.videoId}/mqdefault.jpg`;
-      if (thumbImg) {
-        thumbImg.src = thumbnailUrl;
-        thumbImg.style.display = 'block';
-      }
-      if (thumbIcon) thumbIcon.style.display = 'none';
-    } else {
-      if (thumbImg) thumbImg.style.display = 'none';
-      if (thumbIcon) thumbIcon.style.display = 'block';
-    }
-  } else {
-    if (nameEl) nameEl.textContent = 'Sin reproducción';
-    if (metaEl) metaEl.textContent = 'Agrega videos para comenzar';
-    if (thumbImg) thumbImg.style.display = 'none';
-    if (thumbIcon) thumbIcon.style.display = 'block';
-  }
-}
-
-// === PROGRESS UPDATE ===
-function startProgressUpdate() {
-  setInterval(() => {
-    const progressSlider = document.getElementById('progress');
-    const timeLabel = document.getElementById('timeLabel');
-    const durationLabel = document.getElementById('durationLabel');
-    
-    if (state.playback.duration > 0) {
-      const percent = (state.playback.currentTime / state.playback.duration) * 1000;
-      if (progressSlider) {
-        progressSlider.value = percent;
-        updateSliderBackground(progressSlider, percent, 1000);
-      }
-      if (timeLabel) timeLabel.textContent = formatTime(state.playback.currentTime);
-      if (durationLabel) durationLabel.textContent = formatTime(state.playback.duration);
-    } else {
-      if (progressSlider) {
-        progressSlider.value = 0;
-        updateSliderBackground(progressSlider, 0, 1000);
-      }
-      if (timeLabel) timeLabel.textContent = '0:00';
-      if (durationLabel) durationLabel.textContent = '0:00';
-    }
-  }, 500);
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text == null ? '' : String(text);
+  return div.innerHTML;
 }
 
 function formatTime(seconds) {
@@ -1089,114 +63,635 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+function isLocal(track) { return track && track.provider === 'local'; }
+
+function trackThumb(track) {
+  if (!track) return null;
+  if (track.thumbnail) return track.thumbnail;
+  if (track.provider === 'youtube' && track.videoId) return `https://i.ytimg.com/vi/${track.videoId}/mqdefault.jpg`;
+  return null;
 }
 
-// === YOUTUBE SEARCH ===
-async function searchYouTube() {
-  const input = document.getElementById('ytInput');
-  const query = input.value.trim();
-  
-  if (!query) {
-    showToast('⚠️ Ingresa un término de búsqueda');
-    return;
-  }
-  
-  // Show loading state
-  const resultsDiv = document.getElementById('searchResults');
-  const contentDiv = document.getElementById('searchResultsContent');
-  resultsDiv.classList.remove('hidden');
-  contentDiv.innerHTML = '<div class="search-loading">Buscando en YouTube...</div>';
-  
+// Full descriptor so local files keep provider/filePath/mediaType when saved
+function trackPayload(t) {
+  return {
+    provider: t.provider,
+    videoId: t.videoId,
+    filePath: t.filePath,
+    mediaType: t.mediaType,
+    title: t.title,
+    author: t.author,
+    thumbnail: t.thumbnail,
+    duration: t.duration,
+  };
+}
+
+// ─── toast / confirm ───────────────────────────────────────
+function showToast(message) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+function showConfirm(message, onConfirm) {
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-card confirm-card">
+      <div class="confirm-icon" style="color:var(--neon-pink)">${icon('warning', 34)}</div>
+      <div class="confirm-message">${escapeHtml(message)}</div>
+      <div class="confirm-actions">
+        <button class="pill-btn ghost" data-act="cancel">Cancelar</button>
+        <button class="pill-btn" data-act="ok">Aceptar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('[data-act="cancel"]').onclick = () => modal.remove();
+  modal.querySelector('[data-act="ok"]').onclick = () => { modal.remove(); onConfirm && onConfirm(); };
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+}
+
+// ─── metadata (YouTube oEmbed for missing titles) ──────────
+const metadataCache = new Map();
+async function fetchVideoMetadata(videoId) {
+  if (metadataCache.has(videoId)) return metadataCache.get(videoId);
   try {
-    const results = await window.api.searchYouTube(query);
-    
-    if (!results || results.length === 0) {
-      contentDiv.innerHTML = '<div class="search-empty">No se encontraron resultados. <br><small>Configura YOUTUBE_API_KEY para habilitar búsqueda.</small></div>';
+    const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+    if (!r.ok) throw new Error('meta');
+    const d = await r.json();
+    const m = { title: d.title, author: d.author_name };
+    metadataCache.set(videoId, m);
+    return m;
+  } catch {
+    const fb = { title: videoId, author: 'YouTube' };
+    metadataCache.set(videoId, fb);
+    return fb;
+  }
+}
+async function fetchMetadataForTracks(tracks) {
+  const need = tracks.filter(t => t.provider === 'youtube' && (!t.title || t.title === t.videoId));
+  for (const t of need) {
+    const m = await fetchVideoMetadata(t.videoId);
+    t.title = m.title; t.author = m.author;
+  }
+}
+
+// ════ INIT ════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadState();
+  setupEventListeners();
+  render();
+  startProgressLoop();
+});
+
+async function loadState() {
+  try {
+    const data = await window.api.getState();
+    state.playlists = data.playlists || [];
+    state.settings = data.settings || state.settings;
+
+    const q = data.queue || { queue: [], index: -1, shuffle: false, repeat: 'off' };
+    state.queue = {
+      items: q.queue || [],
+      currentIndex: q.index !== undefined ? q.index : -1,
+      shuffle: !!q.shuffle,
+      repeat: q.repeat || 'off'
+    };
+
+    applyAccent(state.settings.accentColor || '#ff2e97');
+    initSettingsUI();
+
+    fetchMetadataForTracks(state.queue.items).then(() => render());
+  } catch (err) { console.error('loadState', err); }
+}
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return [h, s * 100, l * 100];
+}
+function hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(100, s)) / 100; l = Math.max(0, Math.min(100, l)) / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; } else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; } else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+// Deriva una paleta synthwave armónica del color de acento:
+// acento (primario) + complementario (pop) + sombra del mismo tono (profundidad).
+function applyAccent(color) {
+  const root = document.documentElement.style;
+  const [ar, ag, ab] = hexToRgb(color);
+  const [h, s, l] = rgbToHsl(ar, ag, ab);
+
+  root.setProperty('--accent', color);
+  root.setProperty('--accent-rgb', `${ar}, ${ag}, ${ab}`);
+  const lum = 0.2126 * ar / 255 + 0.7152 * ag / 255 + 0.0722 * ab / 255;
+  root.setProperty('--accent-text', lum > 0.62 ? '#0a0613' : '#ffffff');
+
+  const soft = hslToRgb(h, Math.min(s, 95), Math.min(l + 16, 88));
+  root.setProperty('--neon-pink-soft', `rgb(${soft[0]}, ${soft[1]}, ${soft[2]})`);
+
+  const comp = hslToRgb(h + 180, Math.max(s, 72), 58); // complementario vibrante
+  root.setProperty('--neon-cyan', `rgb(${comp[0]}, ${comp[1]}, ${comp[2]})`);
+  root.setProperty('--cyan-rgb', `${comp[0]}, ${comp[1]}, ${comp[2]}`);
+
+  const deep = hslToRgb(h, Math.max(s - 6, 45), Math.max(l - 26, 24)); // sombra para gradientes
+  root.setProperty('--neon-purple', `rgb(${deep[0]}, ${deep[1]}, ${deep[2]})`);
+  root.setProperty('--purple-rgb', `${deep[0]}, ${deep[1]}, ${deep[2]}`);
+}
+
+function initSettingsUI() {
+  const s = state.settings;
+  if ($('accentColor')) $('accentColor').value = s.accentColor || '#ff2e97';
+  if ($('volumeDefault')) { $('volumeDefault').value = s.volumeDefault; updateSlider($('volumeDefault'), s.volumeDefault, 100); }
+  if ($('volumeDefaultLabel')) $('volumeDefaultLabel').textContent = s.volumeDefault;
+
+  const vol = $('volume'); const volLabel = $('volumeLabel');
+  if (vol) { vol.value = s.volumeDefault; updateSlider(vol, s.volumeDefault, 100); }
+  if (volLabel) volLabel.textContent = s.volumeDefault;
+  window.api.setVolume(s.volumeDefault);
+  volumeBeforeMute = s.volumeDefault;
+}
+
+// ════ EVENT LISTENERS ═════════════════════════════════════
+function setupEventListeners() {
+  const ytInput = $('ytInput');
+  // Enter = buscar en YouTube. Para pegar una URL/ID usa el botón "+ URL".
+  if (ytInput) ytInput.onkeypress = (e) => { if (e.key === 'Enter') { e.preventDefault(); searchYouTube(); } };
+
+  if ($('btnToggleVideo')) $('btnToggleVideo').onclick = toggleVideo;
+  if ($('btnPlayPause')) $('btnPlayPause').onclick = togglePlayPause;
+  // shuffle / prev / next / repeat usan onclick inline en el HTML (binding garantizado)
+  if ($('btnNext')) $('btnNext').onclick = nextTrack;
+  if ($('btnPrev')) $('btnPrev').onclick = prevTrack;
+  if ($('btnShuffle')) $('btnShuffle').onclick = toggleShuffle;
+  if ($('btnRepeat')) $('btnRepeat').onclick = cycleRepeat;
+
+  const vol = $('volume');
+  if (vol) vol.oninput = (e) => {
+    const v = parseInt(e.target.value);
+    if ($('volumeLabel')) $('volumeLabel').textContent = v;
+    updateSlider(vol, v, 100);
+    window.api.setVolume(v);
+    if (isMuted && v > 0) { isMuted = false; updateMuteUI(); }
+  };
+
+  const btnMute = $('btnMute');
+  if (btnMute) btnMute.onclick = () => {
+    const vol = $('volume');
+    if (isMuted) {
+      isMuted = false; vol.value = volumeBeforeMute; updateSlider(vol, volumeBeforeMute, 100);
+      if ($('volumeLabel')) $('volumeLabel').textContent = volumeBeforeMute;
+      window.api.setVolume(volumeBeforeMute);
+    } else {
+      volumeBeforeMute = parseInt(vol.value) || 60; isMuted = true;
+      vol.value = 0; updateSlider(vol, 0, 100);
+      if ($('volumeLabel')) $('volumeLabel').textContent = '0';
+      window.api.setVolume(0);
+    }
+    updateMuteUI();
+  };
+
+  const progress = $('progress');
+  if (progress) {
+    // Mientras arrastras, marca "seeking" para que el timer no pelee con tu dedo
+    progress.oninput = (e) => {
+      isSeeking = true;
+      const v = parseInt(e.target.value);
+      updateSlider(progress, v, 1000);
+      const tl = $('timeLabel');
+      if (tl && state.playback.duration > 0) tl.textContent = formatTime((v / 1000) * state.playback.duration);
+    };
+    progress.onchange = (e) => {
+      if (state.playback.duration > 0) window.api.seek((parseInt(e.target.value) / 1000) * state.playback.duration);
+      isSeeking = false;
+    };
+  }
+
+  if ($('accentColor')) $('accentColor').oninput = async (e) => {
+    applyAccent(e.target.value); await window.api.setAccentColor(e.target.value); state.settings.accentColor = e.target.value;
+  };
+  if ($('volumeDefault')) $('volumeDefault').oninput = async (e) => {
+    const v = parseInt(e.target.value);
+    if ($('volumeDefaultLabel')) $('volumeDefaultLabel').textContent = v;
+    updateSlider($('volumeDefault'), v, 100);
+    await window.api.setVolumeDefault(v); state.settings.volumeDefault = v;
+  };
+
+  // delegated add-to-playlist select
+  document.addEventListener('change', async (e) => {
+    if (e.target.classList && e.target.classList.contains('add-to-playlist-select')) {
+      const i = parseInt(e.target.dataset.trackIndex);
+      const pid = e.target.value;
+      const source = e.target.dataset.source || 'queue';
+      if (pid) { await addTrackToPlaylist(i, pid, source); e.target.value = ''; }
+    }
+  });
+
+  window.api.onPlayerState((s) => { setPlaying(s === 'playing'); });
+  window.api.onTimeUpdate((d) => { state.playback.currentTime = d.current; state.playback.duration = d.duration; });
+  window.api.onQueueUpdate((q) => {
+    const nq = { items: q.queue || [], currentIndex: q.index ?? -1, shuffle: !!q.shuffle, repeat: q.repeat || 'off' };
+    const h = queueHash(nq);
+    if (h === lastQueueHash) return; // nada cambió → no re-render (evita el parpadeo del select)
+    lastQueueHash = h;
+    state.queue = nq;
+    fetchMetadataForTracks(state.queue.items).then(() => render());
+    render();
+  });
+}
+
+function setPlaying(playing) {
+  state.playback.isPlaying = playing;
+  document.body.classList.toggle('playing', playing);
+  const pi = $('playIcon'), pa = $('pauseIcon');
+  if (pi && pa) { pi.style.display = playing ? 'none' : 'block'; pa.style.display = playing ? 'block' : 'none'; }
+}
+
+// ════ ACTIONS ═════════════════════════════════════════════
+window.addLocalFiles = async function () {
+  try {
+    const res = await window.api.addLocalFiles();
+    if (res && res.added > 0) { await loadState(); render(); showToast(`🎧 ${res.added} archivo(s) agregado(s)`); }
+  } catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.createPlaylistPrompt = function () {
+  const i = $('newPlaylistName');
+  if (!i) return;
+  if (i.value.trim()) createPlaylist(); // si ya hay nombre, crea
+  else i.focus();                       // si está vacío, enfoca para escribir
+};
+
+window.createPlaylist = async function () {
+  const input = $('newPlaylistName');
+  const name = input ? input.value.trim() : '';
+  if (!name) return;
+  try { await window.api.createPlaylist(name); input.value = ''; await loadState(); render(); showToast('✅ Playlist creada'); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.importPlaylist = async function () {
+  try { await window.api.importPlaylist(); await loadState(); render(); showToast('✅ Playlist importada'); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.deletePlaylist = function (id) {
+  showConfirm('¿Eliminar esta playlist?', async () => {
+    try {
+      await window.api.deletePlaylist(id);
+      // si estabas viendo esa playlist, vuelve a la cola; y fuerza refresco
+      if (state.selectedPlaylist && state.selectedPlaylist.id === id) { state.selectedPlaylist = null; state.viewMode = 'queue'; }
+      lastQueueHash = '';
+      state.playback = { isPlaying: false, currentTime: 0, duration: 0 };
+      setPlaying(false);
+      await loadState(); render(); showToast('🗑 Playlist eliminada');
+    } catch (err) { showToast('❌ ' + err.message); }
+  });
+};
+
+window.exportPlaylist = async function (id) {
+  try { await window.api.exportPlaylist(id); showToast('⬇ Playlist exportada'); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.openPlaylist = function (id) {
+  const pl = state.playlists.find(p => p.id === id);
+  if (pl) { state.selectedPlaylist = pl; state.viewMode = 'playlist'; render(); }
+};
+window.backToQueue = function () { state.selectedPlaylist = null; state.viewMode = 'queue'; render(); };
+
+window.playFromPlaylist = async function (playlistId, index) {
+  try { await window.api.enqueuePlaylist(playlistId, index); await window.api.playAtIndex(index); backToQueue(); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.removeFromPlaylist = async function (playlistId, trackId) {
+  try {
+    await window.api.removeTrackFromPlaylist(playlistId, trackId);
+    await loadState();
+    if (state.selectedPlaylist && state.selectedPlaylist.id === playlistId)
+      state.selectedPlaylist = state.playlists.find(p => p.id === playlistId);
+    render(); showToast('🗑 Eliminada de la playlist');
+  } catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.playAtIndex = async function (i) {
+  try { await window.api.playAtIndex(i); } catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.removeFromQueue = function (index) {
+  state.queue.items.splice(index, 1);
+  if (state.queue.currentIndex >= index && state.queue.currentIndex > 0) state.queue.currentIndex--;
+  render();
+};
+
+window.copyYoutubeLink = async function (videoId) {
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  try { await navigator.clipboard.writeText(url); showToast('🔗 Link copiado'); }
+  catch { showToast('🔗 ' + url); }
+};
+
+window.togglePlayPause = async function () {
+  const r = await window.api.playPause();
+  if (r && r.isPlaying !== undefined) setPlaying(r.isPlaying);
+};
+
+window.addToQueue = async function () {
+  const input = $('ytInput');
+  const value = input ? input.value.trim() : '';
+  if (!value) { showToast('⚠️ Ingresa una URL o ID'); return; }
+  try {
+    const wasEmpty = state.queue.items.length === 0;
+    await window.api.enqueueTrack(value);
+    input.value = '';
+    setTimeout(async () => {
+      const added = state.queue.items[state.queue.items.length - 1];
+      if (added && added.provider === 'youtube' && (!added.title || added.title === added.videoId)) {
+        const m = await fetchVideoMetadata(added.videoId); added.title = m.title; added.author = m.author;
+      }
+      if (added && state.playlists.length > 0) showAddToPlaylistModal(added);
+      if (wasEmpty) await window.api.playAtIndex(0);
+    }, 500);
+  } catch (err) { showToast('❌ ' + err.message); }
+};
+
+window.nextTrack = function () { window.api.next().catch((e) => console.error('next', e)); };
+window.prevTrack = function () { window.api.prev().catch((e) => console.error('prev', e)); };
+
+window.toggleShuffle = async function () {
+  state.queue.shuffle = !state.queue.shuffle; // optimista: feedback inmediato
+  renderTransport();
+  try { await window.api.toggleShuffle(); } catch (e) { console.error('shuffle', e); }
+};
+window.cycleRepeat = async function () {
+  const modes = ['off', 'all', 'one'];
+  state.queue.repeat = modes[(modes.indexOf(state.queue.repeat) + 1) % 3]; // optimista
+  renderTransport();
+  try { await window.api.cycleRepeat(); } catch (e) { console.error('repeat', e); }
+};
+
+async function toggleVideo() {
+  state.videoVisible = !state.videoVisible;
+  try { await window.api.toggleVideo(state.videoVisible); } catch {}
+  const b = $('btnToggleVideo');
+  if (b) b.classList.toggle('active', state.videoVisible);
+}
+
+// ════ ADD-TO-PLAYLIST MODAL ═══════════════════════════════
+let pendingTrack = null;
+window.showAddToPlaylistModal = function (track) {
+  pendingTrack = track;
+  const modal = $('addToPlaylistModal');
+  $('addedTrackName').textContent = track.title || track.videoId || 'Pista';
+  const opts = $('playlistOptions');
+  if (!state.playlists.length) opts.innerHTML = '<p class="no-playlists">No tienes playlists todavía.</p>';
+  else opts.innerHTML = state.playlists.map(pl => `
+    <div class="opt" onclick="addPendingToPlaylist('${pl.id}')">
+      <div class="opt-ico">${icon('music', 16)}</div>
+      <div style="flex:1"><div class="opt-name">${escapeHtml(pl.name)}</div><div class="opt-sub">${pl.items.length} pistas</div></div>
+    </div>`).join('');
+  modal.classList.remove('hidden');
+};
+window.closeAddToPlaylistModal = function () { $('addToPlaylistModal').classList.add('hidden'); pendingTrack = null; };
+window.addPendingToPlaylist = async function (pid) {
+  if (!pendingTrack) return;
+  try {
+    await window.api.addTrackToPlaylist(pid, trackPayload(pendingTrack));
+    await loadState(); render(); closeAddToPlaylistModal(); showToast('✅ Agregado a playlist');
+  } catch (err) { showToast('❌ ' + err.message); }
+};
+window.addTrackToPlaylist = async function (index, pid, source) {
+  const list = (source === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.items : state.queue.items;
+  const t = list[index];
+  if (!t || !pid) return;
+  try { await window.api.addTrackToPlaylist(pid, trackPayload(t)); await loadState(); render(); showToast('✅ Agregado a playlist'); }
+  catch (err) { showToast('❌ ' + err.message); }
+};
+
+// ════ SETTINGS ════════════════════════════════════════════
+window.toggleSettings = function () { $('settingsPanel').classList.toggle('hidden'); };
+
+// ════ YOUTUBE SEARCH ══════════════════════════════════════
+window.searchYouTube = async function () {
+  const q = ($('ytInput').value || '').trim();
+  if (!q) { showToast('⚠️ Escribe algo para buscar'); return; }
+  const panel = $('searchResults'), content = $('searchResultsContent');
+  panel.classList.remove('hidden');
+  content.innerHTML = '<div class="search-loading">Buscando en YouTube…</div>';
+  try {
+    const results = await window.api.searchYouTube(q);
+    if (!results || !results.length) {
+      content.innerHTML = '<div class="search-empty">Sin resultados. Intenta con otra búsqueda.</div>';
       return;
     }
-    
-    // Render results
-    contentDiv.innerHTML = results.map(result => `
-      <div class="search-result-item" onclick="addSearchResultToQueue('${result.videoId}')">
-        <img src="${result.thumbnail}" alt="${escapeHtml(result.title)}" class="search-result-thumb">
+    content.innerHTML = results.map(r => `
+      <div class="search-result-item" onclick="addSearchResultToQueue('${r.videoId}')">
+        <img class="search-result-thumb" src="${r.thumbnail}" alt="">
         <div class="search-result-info">
-          <div class="search-result-title">${escapeHtml(result.title)}</div>
-          <div class="search-result-author">${escapeHtml(result.author)}</div>
-          ${result.duration > 0 ? `<div class="search-result-duration">${formatTime(result.duration)}</div>` : ''}
+          <div class="search-result-title">${escapeHtml(r.title)}</div>
+          <div class="search-result-author">${escapeHtml(r.author)}</div>
         </div>
-        <button class="btn-icon search-result-add" onclick="event.stopPropagation(); addSearchResultToQueue('${result.videoId}')" title="Agregar a la cola">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
+      </div>`).join('');
+  } catch (err) {
+    content.innerHTML = '<div class="search-error">Error al buscar.</div>';
+  }
+};
+window.addSearchResultToQueue = async function (videoId) {
+  try { await window.api.enqueueTrack(videoId); showToast('✅ Agregado a la cola'); closeSearchResults(); }
+  catch { showToast('❌ Error al agregar'); }
+};
+window.closeSearchResults = function () { $('searchResults').classList.add('hidden'); $('ytInput').value = ''; };
+
+// ════ RENDER ══════════════════════════════════════════════
+function render() {
+  renderPlaylists();
+  if (state.viewMode === 'playlist' && state.selectedPlaylist) renderPlaylistView();
+  else renderQueue();
+  renderTransport();
+  renderNowPlaying();
+}
+
+function renderPlaylists() {
+  const c = $('playlistList');
+  if (!c) return;
+  if (!state.playlists.length) {
+    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('folder', 30)}</div><div class="empty-state-text">Sin playlists aún</div></div>`;
+    return;
+  }
+  c.innerHTML = state.playlists.map(pl => `
+    <div class="playlist-item" onclick="openPlaylist('${pl.id}')">
+      <div class="playlist-cover">${icon('music', 18)}</div>
+      <div class="playlist-details">
+        <div class="playlist-name">${escapeHtml(pl.name)}</div>
+        <div class="playlist-meta">${pl.items.length} pistas</div>
       </div>
-    `).join('');
-    
-  } catch (error) {
-    console.error('Error searching YouTube:', error);
-    contentDiv.innerHTML = '<div class="search-error">Error al buscar. Intenta nuevamente.</div>';
-    showToast('❌ Error al buscar en YouTube');
+      <div class="playlist-actions">
+        <button onclick="event.stopPropagation(); exportPlaylist('${pl.id}')" title="Exportar">${icon('download', 15)}</button>
+        <button onclick="event.stopPropagation(); deletePlaylist('${pl.id}')" title="Eliminar">${icon('trash', 15)}</button>
+      </div>
+    </div>`).join('');
+}
+
+function queueItemHtml(track, i, opts) {
+  const active = opts.active;
+  const local = isLocal(track);
+  const thumb = trackThumb(track);
+  const thumbHtml = thumb
+    ? `<img src="${thumb}" alt="">`
+    : `<span class="ph">${local && track.mediaType === 'video' ? icon('film', 18) : icon('music', 18)}</span>`;
+  const tag = local ? '<span class="tag local">Local</span>' : '<span class="tag yt">YouTube</span>';
+  const author = escapeHtml(track.author || (local ? 'Archivo local' : 'YouTube'));
+  // En la vista de una playlist no ofrezcas la playlist actual (evita duplicar)
+  const curPlId = (state.viewMode === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.id : null;
+  const addable = state.playlists.filter(pl => pl.id !== curPlId);
+  const plOpts = addable.map(pl => `<option value="${pl.id}">${escapeHtml(pl.name)}</option>`).join('');
+  const copyBtn = (!local && track.videoId)
+    ? `<button onclick="event.stopPropagation(); copyYoutubeLink('${track.videoId}')" title="Copiar link">${icon('link', 14)}</button>` : '';
+  const plSelect = addable.length
+    ? `<select class="add-to-playlist-select" data-track-index="${i}" data-source="${curPlId ? 'playlist' : 'queue'}" onclick="event.stopPropagation();"><option value="">+ Playlist</option>${plOpts}</select>` : '';
+  return `
+    <div class="queue-item ${active ? 'active' : ''}" onclick="${opts.onclick}">
+      <div class="queue-item-index">${active ? icon('play', 11) : i + 1}</div>
+      <div class="queue-thumb">${thumbHtml}</div>
+      <div class="queue-item-info">
+        <div class="queue-item-title">${escapeHtml(track.title || track.videoId || 'Pista')}</div>
+        <div class="queue-item-meta">${tag}${author}</div>
+      </div>
+      <div class="queue-item-actions">
+        ${copyBtn}${plSelect}
+        ${opts.removeBtn}
+      </div>
+    </div>`;
+}
+
+function renderQueue() {
+  const c = $('queueItems'), count = $('queueCount'), title = $('queueTitle');
+  if (title) title.textContent = 'Cola de reproducción';
+  if (count) count.textContent = `${state.queue.items.length} ${state.queue.items.length === 1 ? 'pista' : 'pistas'}`;
+  if (!c) return;
+  if (!state.queue.items.length) {
+    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('music', 30)}</div><div class="empty-state-text">Cola vacía. Agrega música local o de YouTube.</div></div>`;
+    return;
+  }
+  c.innerHTML = state.queue.items.map((t, i) => queueItemHtml(t, i, {
+    active: i === state.queue.currentIndex,
+    onclick: `playAtIndex(${i})`,
+    removeBtn: `<button onclick="event.stopPropagation(); removeFromQueue(${i})" title="Quitar">${icon('x', 14)}</button>`
+  })).join('');
+}
+
+function renderPlaylistView() {
+  const c = $('queueItems'), count = $('queueCount'), title = $('queueTitle');
+  const pl = state.selectedPlaylist;
+  if (!pl || !c) return;
+  if (title) title.innerHTML = `<button class="back-btn" onclick="backToQueue()" title="Volver">${icon('back', 18)}</button>${escapeHtml(pl.name)}`;
+  if (count) count.textContent = `${pl.items.length} ${pl.items.length === 1 ? 'pista' : 'pistas'}`;
+  if (!pl.items.length) {
+    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('folder', 30)}</div><div class="empty-state-text">Playlist vacía.</div></div>`;
+    return;
+  }
+  c.innerHTML = `<button class="play-all-btn" onclick="playFromPlaylist('${pl.id}', 0)">${icon('play', 14)} Reproducir todo</button>` +
+    pl.items.map((t, i) => queueItemHtml(t, i, {
+      active: false,
+      onclick: `playFromPlaylist('${pl.id}', ${i})`,
+      removeBtn: `<button onclick="event.stopPropagation(); removeFromPlaylist('${pl.id}', '${t.id}')" title="Quitar">${icon('trash', 15)}</button>`
+    })).join('');
+}
+
+function repeatIconSvg(one) {
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+    `<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>` +
+    (one ? `<text x="12" y="14.5" font-size="9" font-weight="800" text-anchor="middle" fill="currentColor" stroke="none">1</text>` : '') +
+    `</svg>`;
+}
+
+function renderTransport() {
+  const sh = $('btnShuffle'); if (sh) sh.classList.toggle('active', state.queue.shuffle);
+  const rp = $('btnRepeat');
+  if (rp) {
+    rp.classList.toggle('active', state.queue.repeat !== 'off');
+    rp.title = state.queue.repeat === 'one' ? 'Repetir una' : state.queue.repeat === 'all' ? 'Repetir todo' : 'Repetir';
+    rp.innerHTML = repeatIconSvg(state.queue.repeat === 'one');
   }
 }
 
-async function addSearchResultToQueue(videoId) {
-  try {
-    await window.api.enqueueTrack(videoId);
-    showToast('✅ Agregado a la cola');
-    closeSearchResults();
-  } catch (error) {
-    console.error('Error adding to queue:', error);
-    showToast('❌ Error al agregar a la cola');
-  }
-}
+function renderNowPlaying() {
+  const cur = state.queue.currentIndex >= 0 ? state.queue.items[state.queue.currentIndex] : null;
+  const heroImg = $('heroImg'), heroFallback = $('heroFallback'), heroBadge = $('heroBadge');
+  const pbImg = $('playerThumbImg'), pbIcon = $('playerThumbIcon');
 
-function closeSearchResults() {
-  const resultsDiv = document.getElementById('searchResults');
-  resultsDiv.classList.add('hidden');
-  document.getElementById('ytInput').value = '';
-}
-
-// === YOUTUBE API KEY CONFIGURATION ===
-async function saveYouTubeApiKey() {
-  const input = document.getElementById('youtubeApiKey');
-  const apiKey = input.value.trim();
-  
-  try {
-    await window.api.setYouTubeApiKey(apiKey);
-    showToast('✅ API Key guardada correctamente');
-  } catch (error) {
-    console.error('Error saving API key:', error);
-    showToast('❌ Error al guardar API Key');
-  }
-}
-
-function toggleApiKeyVisibility() {
-  const input = document.getElementById('youtubeApiKey');
-  const eyeIcon = document.getElementById('eyeIcon');
-  const eyeOffIcon = document.getElementById('eyeOffIcon');
-  
-  if (input.type === 'password') {
-    input.type = 'text';
-    eyeIcon.style.display = 'none';
-    eyeOffIcon.style.display = 'block';
+  if (cur) {
+    const thumb = trackThumb(cur);
+    if (thumb) {
+      heroImg.src = thumb; heroImg.style.display = 'block'; heroFallback.style.display = 'none';
+      pbImg.src = thumb; pbImg.style.display = 'block'; pbIcon.style.display = 'none';
+    } else {
+      heroImg.style.display = 'none'; heroFallback.style.display = 'grid';
+      pbImg.style.display = 'none'; pbIcon.style.display = 'grid';
+    }
+    heroBadge.classList.remove('hidden');
+    heroBadge.textContent = isLocal(cur) ? 'Local' : 'YouTube';
+    heroBadge.className = 'src-badge ' + (isLocal(cur) ? 'local' : 'yt');
+    $('nowTitle').textContent = cur.title || cur.videoId || 'Pista';
+    $('nowMeta').textContent = cur.author || (isLocal(cur) ? 'Archivo local' : 'YouTube');
+    $('playerTrackName').textContent = cur.title || cur.videoId || 'Pista';
+    $('playerTrackMeta').textContent = cur.author || (isLocal(cur) ? 'Archivo local' : 'YouTube');
   } else {
-    input.type = 'password';
-    eyeIcon.style.display = 'block';
-    eyeOffIcon.style.display = 'none';
+    heroImg.style.display = 'none'; heroFallback.style.display = 'grid'; heroBadge.classList.add('hidden');
+    pbImg.style.display = 'none'; pbIcon.style.display = 'grid';
+    $('nowTitle').textContent = 'Nada sonando';
+    $('nowMeta').textContent = 'Agrega música local o de YouTube para empezar';
+    $('playerTrackName').textContent = '—';
+    $('playerTrackMeta').textContent = '—';
   }
 }
 
-function showApiKeyHelp() {
-  const modal = document.getElementById('apiKeyHelpModal');
-  modal.classList.remove('hidden');
+// ════ SLIDERS / PROGRESS ══════════════════════════════════
+function updateSlider(slider, value, max) {
+  const pct = (value / max) * 100;
+  slider.style.background = `linear-gradient(to right, var(--accent) ${pct}%, rgba(255,255,255,0.12) ${pct}%)`;
 }
 
-function closeApiKeyHelpModal() {
-  const modal = document.getElementById('apiKeyHelpModal');
-  modal.classList.add('hidden');
+function updateMuteUI() {
+  const v = $('volumeIcon'), m = $('muteIcon');
+  if (v && m) { v.style.display = isMuted ? 'none' : 'block'; m.style.display = isMuted ? 'block' : 'none'; }
+}
+
+function startProgressLoop() {
+  setInterval(() => {
+    if (isSeeking) return; // no pelear con el arrastre del usuario
+    const p = $('progress'), tl = $('timeLabel'), dl = $('durationLabel');
+    if (state.playback.duration > 0) {
+      const pct = (state.playback.currentTime / state.playback.duration) * 1000;
+      if (p) { p.value = pct; updateSlider(p, pct, 1000); }
+      if (tl) tl.textContent = formatTime(state.playback.currentTime);
+      if (dl) dl.textContent = formatTime(state.playback.duration);
+    } else {
+      if (p) { p.value = 0; updateSlider(p, 0, 1000); }
+      if (tl) tl.textContent = '0:00';
+      if (dl) dl.textContent = '0:00';
+    }
+  }, 250);
 }

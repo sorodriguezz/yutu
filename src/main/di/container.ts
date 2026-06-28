@@ -5,9 +5,12 @@ import { JsonDb } from "../infra/persistence/jsonDb";
 import { PlaylistRepositoryJson } from "../infra/persistence/playlistRepositoryJson";
 import { SettingsRepositoryJson } from "../infra/persistence/settingsRepositoryJson";
 import { ElectronFileDialog } from "../infra/io/fileDialogElectron";
-import { ElectronYouTubePlayer } from "../infra/player/youtubePlayerElectron";
+import { ElectronArchiveAdapter } from "../infra/io/electronArchiveAdapter";
+import { ElectronMediaPlayer } from "../infra/player/mediaPlayerElectron";
+import { GoogleAuthAdapter } from "../infra/auth/googleAuthAdapter";
 import { ConsoleLogger } from "../infra/logging/consoleLogger";
 import { makeId } from "../infra/util/ids";
+import { DEFAULT_GOOGLE_CLIENT_ID } from "../config";
 
 import { QueueService } from "../../core/application/services/QueueService";
 
@@ -19,6 +22,7 @@ import { ExportPlaylist } from "../../core/application/usecases/playlists/Export
 import { ImportPlaylist } from "../../core/application/usecases/playlists/ImportPlaylist";
 
 import { EnqueueTrack } from "../../core/application/usecases/playback/EnqueueTrack";
+import { EnqueueTracks } from "../../core/application/usecases/playback/EnqueueTracks";
 import { EnqueuePlaylist } from "../../core/application/usecases/playback/EnqueuePlaylist";
 import { PlayAtIndex } from "../../core/application/usecases/playback/PlayAtIndex";
 import { PlayPause } from "../../core/application/usecases/playback/PlayPause";
@@ -32,7 +36,14 @@ import { CycleRepeat } from "../../core/application/usecases/playback/CycleRepea
 import { UpdateAccentColor } from "../../core/application/usecases/settings/UpdateAccentColor";
 import { UpdateVolumeDefault } from "../../core/application/usecases/settings/UpdateVolumeDefault";
 import { UpdateYouTubeApiKey } from "../../core/application/usecases/settings/UpdateYouTubeApiKey";
+import { UpdateGoogleCredentials } from "../../core/application/usecases/settings/UpdateGoogleCredentials";
 import { SearchYouTube } from "../../core/application/usecases/playback/SearchYouTube";
+
+import { SignInGoogle } from "../../core/application/usecases/auth/SignInGoogle";
+import { SignOutGoogle } from "../../core/application/usecases/auth/SignOutGoogle";
+import { GetAuthProfile } from "../../core/application/usecases/auth/GetAuthProfile";
+import { ListYouTubePlaylists } from "../../core/application/usecases/auth/ListYouTubePlaylists";
+import { ImportYouTubePlaylist } from "../../core/application/usecases/auth/ImportYouTubePlaylist";
 
 import { YouTubeSearchAdapter } from "../infra/youtube/youtubeSearchAdapter";
 
@@ -53,8 +64,10 @@ export function buildContainer(opts: {
   const playlistRepo = new PlaylistRepositoryJson(db);
   const settingsRepo = new SettingsRepositoryJson(db);
   const fileDialog = new ElectronFileDialog(opts.getWindow);
-  const player = new ElectronYouTubePlayer(opts.playerView.webContents);
-  
+  const archive = new ElectronArchiveAdapter(opts.getWindow);
+  const player = new ElectronMediaPlayer(opts.playerView.webContents);
+  const auth = new GoogleAuthAdapter(settingsRepo);
+
   // YouTube search adapter will be initialized with API key from settings
   const youtubeSearch = new YouTubeSearchAdapter(""); // Will be updated via setApiKey
 
@@ -67,7 +80,17 @@ export function buildContainer(opts: {
         const playlists = await playlistRepo.getAll();
         const settings = await settingsRepo.get();
         const queueState = queue.getState();
-        return { playlists, settings, queue: queueState };
+        // Don't leak secrets/tokens to the renderer
+        const safeSettings = {
+          accentColor: settings.accentColor,
+          volumeDefault: settings.volumeDefault,
+          youtubeApiKey: settings.youtubeApiKey,
+          googleClientId: settings.googleClientId,
+          hasGoogleSecret: !!settings.googleClientSecret,
+          googleConfigured: !!(settings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID),
+          profile: settings.auth?.profile ?? null,
+        };
+        return { playlists, settings: safeSettings, queue: queueState };
       }
     },
     playlist: {
@@ -75,11 +98,12 @@ export function buildContainer(opts: {
       delete: new DeletePlaylist(playlistRepo),
       addTrack: new AddTrackToPlaylist(playlistRepo, makeId),
       removeTrack: new RemoveTrackFromPlaylist(playlistRepo),
-      export: new ExportPlaylist(playlistRepo, fileDialog),
-      import: new ImportPlaylist(playlistRepo, fileDialog, makeId)
+      export: new ExportPlaylist(playlistRepo, archive),
+      import: new ImportPlaylist(playlistRepo, archive, makeId)
     },
     playback: {
       enqueueTrack: new EnqueueTrack(queue),
+      enqueueTracks: new EnqueueTracks(queue),
       enqueuePlaylist: new EnqueuePlaylist(playlistRepo, queue),
       playAt: new PlayAtIndex(queue, player),
       playPause: new PlayPause(player),
@@ -94,10 +118,18 @@ export function buildContainer(opts: {
     settings: {
       setAccent: new UpdateAccentColor(settingsRepo),
       setVolumeDefault: new UpdateVolumeDefault(settingsRepo),
-      setYouTubeApiKey: new UpdateYouTubeApiKey(settingsRepo)
+      setYouTubeApiKey: new UpdateYouTubeApiKey(settingsRepo),
+      setGoogleCredentials: new UpdateGoogleCredentials(settingsRepo)
     },
-    ports: { logger, youtubeSearch }
+    auth: {
+      signIn: new SignInGoogle(auth),
+      signOut: new SignOutGoogle(auth),
+      getProfile: new GetAuthProfile(auth),
+      listYouTubePlaylists: new ListYouTubePlaylists(auth),
+      importYouTubePlaylist: new ImportYouTubePlaylist(auth, playlistRepo, makeId)
+    },
+    ports: { logger, youtubeSearch, auth }
   };
 
-  return { uc, playlistRepo, settingsRepo, queue, player, fileDialog, logger, youtubeSearch };
+  return { uc, playlistRepo, settingsRepo, queue, player, fileDialog, auth, logger, youtubeSearch };
 }

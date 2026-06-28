@@ -1,232 +1,121 @@
-# YT Local Player
+# 🌆 Yutu — Synthwave Player
 
-🎵 Reproductor de música desde YouTube con gestión de playlists locales y una interfaz moderna estilo Spotify.
+Reproductor de escritorio (Electron + TypeScript, **Clean Architecture**) con estética **synthwave/retro**. Reproduce **música y video locales (MP3/MP4…)**, videos de **YouTube**, gestiona playlists y te permite **iniciar sesión con Google** para importar tus playlists de YouTube.
 
-## Características
+![icono](build/icon.png)
 
-### 🎬 Reproducción desde YouTube
-- Pega cualquier URL de YouTube para reproducir
-- Soporta múltiples formatos:
-  - `https://www.youtube.com/watch?v=VIDEOID`
-  - `https://youtu.be/VIDEOID`
-  - `https://www.youtube.com/shorts/VIDEOID`
-  - VideoId directo (11 caracteres)
-- Obtención automática de título y autor del video
+## ✨ Novedades (v2.0)
 
-### 🎛️ Controles de reproducción
-- ▶️ Play / ⏸️ Pause
-- ⏭️ Siguiente / ⏮️ Anterior
-- 🔊 Control de volumen con slider
-- 🔇 Botón de Mute/Unmute
-- Barra de progreso con seek
-- Tiempo actual / duración en formato `m:ss`
+- 🎧 **Reproducción local** — agrega tus archivos `MP3, WAV, FLAC, M4A, AAC, OGG, OPUS` (audio) y `MP4, WEBM, MKV, MOV, AVI` (video) desde tu PC. Streaming local con soporte de _seek_ (HTTP Range).
+- 🔴 **YouTube** — pega cualquier URL/ID o busca con tu API Key. Reproducción vía YouTube IFrame API.
+- 🟢 **Login con Google (OAuth 2.0 + PKCE)** — inicia sesión de forma segura (navegador del sistema + loopback). Importa tus **playlists de YouTube** a playlists locales.
+- 🎨 **Rediseño 360 synthwave** — sol neón, grid en perspectiva animado, scanlines, glassmorphism, glow y tipografía Orbitron. Badges por fuente (YouTube / Local), ecualizador animado y vinilo girando.
+- 📦 **Releases automáticos** — GitHub Actions construye y publica instaladores para **Windows (.exe)**, **macOS (.dmg + .zip, Intel y Apple Silicon)** y **Linux (.AppImage + .deb)**.
 
-### 📋 Cola de reproducción
-- Agregar videos a la cola desde URL
-- Ver lista completa de canciones en cola
-- Reproducir cualquier canción haciendo clic
-- 📎 **Copiar link de YouTube** de cualquier canción
-- ❌ Eliminar canciones de la cola
-- Contador de canciones
-
-### 🔀 Shuffle y Repeat
-- **Shuffle**: Reproducción aleatoria on/off
-- **Repeat**: Ciclo de repetición
-  - `off` → Se detiene al final
-  - `all` → Repite toda la cola
-  - `one` → Repite la canción actual
-
-### 📁 Playlists locales
-- ➕ Crear playlists con nombre personalizado
-- 🗑️ Eliminar playlists
-- Agregar canciones desde la cola a cualquier playlist
-- ▶️ Encolar playlist completa para reproducir
-- 📥 **Exportar** playlist a archivo JSON
-- 📤 **Importar** playlist desde archivo JSON
-
-### ⚙️ Configuración
-- 🎨 Color de acento personalizable
-- 🔊 Volumen por defecto (se guarda y restaura al iniciar)
-- 📺 Mostrar/ocultar ventana del video
-- Persistencia automática de todas las configuraciones
-
-### 🎨 Interfaz moderna
-- Tema oscuro estilo Spotify
-- Animaciones suaves
-- Controles grandes y accesibles
-- Layout con sidebar + área principal + barra de reproductor
-- Notificaciones toast para feedback visual
-
-### 🔍 Búsqueda y Visualización
-- **Búsqueda integrada en YouTube**: Busca videos directamente desde la app
-- **Thumbnails de videos**: Vista previa visual de todas las canciones
-- Información completa de cada video (título, autor, duración)
-
-### ⌨️ Funciones del Sistema
-- **Media keys del teclado**: Control con teclas multimedia del teclado
-- **Tray icon**: Icono en bandeja del sistema con menú contextual
-- **Mini player**: Control desde el menú de la bandeja
-- **Auto-actualización**: Actualizaciones automáticas de la aplicación
-
-## Capturas de pantalla
-
-La interfaz incluye:
-- **Sidebar izquierdo**: Logo, biblioteca de playlists, botón importar
-- **Área principal**: Barra de búsqueda, información del track actual, cola de reproducción
-- **Barra inferior**: Controles de reproducción, progreso, volumen
-
-## Instalación
+## 🚀 Desarrollo
 
 ```bash
-# Clonar repositorio
-git clone https://github.com/sorodriguezz/yutu.git
-cd yutu
-
-# Instalar dependencias
-npm install
-
-# Compilar y ejecutar
-npm start
-
-# Solo compilar
-npm run build
-
-# Generar distribución
-npm run dist
+npm install        # dependencias
+npm start          # compila y abre la app
+npm run build      # solo compilar (tsc + copia de assets)
+npm run dist       # generar instaladores para tu plataforma actual
 ```
 
-## Arquitectura
+## 🎵 Cómo usar
 
-El proyecto sigue **Clean Architecture** con separación clara:
+| Acción | Dónde |
+|---|---|
+| Agregar MP3/MP4 locales | Sidebar → **Archivos locales** |
+| Reproducir YouTube | Barra superior → pega URL → **+ URL**, o **Buscar** |
+| Crear playlist | Sidebar → ＋ / campo "Nueva playlist" |
+| Importar/Exportar playlist | Sidebar → **Importar** · ⬇ en cada playlist |
+| Iniciar sesión Google | Sidebar → **Conectar con Google** |
+| Importar playlists de YouTube | Perfil → botón **YT** |
+| Color de acento, volumen, claves | Barra superior → ⚙ Ajustes |
+
+## 🔐 Configurar el login con Google
+
+El login usa el flujo de **app instalada** (Authorization Code + PKCE). Necesitas tus propias credenciales (gratis):
+
+1. Entra a [Google Cloud Console](https://console.cloud.google.com/) y crea/elige un proyecto.
+2. **APIs y servicios → Biblioteca** → habilita **YouTube Data API v3**.
+3. **Pantalla de consentimiento OAuth** → tipo *Externo* → agrega tu correo como *usuario de prueba*.
+4. **Credenciales → Crear credenciales → ID de cliente de OAuth → Tipo: _App de escritorio_**.
+5. Copia el **Client ID** y el **Client Secret**.
+6. En Yutu: **⚙ Ajustes → Cuenta de Google** → pega ambos → **Guardar credenciales**.
+7. **Conectar con Google** en la barra lateral. Se abrirá tu navegador; al autorizar, vuelve a la app.
+
+> El _Client Secret_ de un cliente de escritorio no es confidencial (Google lo asume así), pero Yutu **nunca** lo expone al proceso de UI: los tokens se guardan localmente en `db.json` y solo el proceso principal los maneja.
+
+### YouTube API Key (búsqueda, opcional)
+
+Para la búsqueda integrada: **⚙ Ajustes → YouTube API Key** (crea una _API Key_ en Cloud Console con YouTube Data API v3 habilitada). Sin ella, puedes seguir agregando videos por URL directa.
+
+## 📦 Publicar un release
+
+Los workflows están en `.github/workflows/`:
+
+- **`ci.yml`** — compila el proyecto en cada push/PR (verifica tipos).
+- **`release.yml`** — al empujar un tag `vX.Y.Z` construye y publica los instaladores en _GitHub Releases_.
+
+```bash
+# Sube la versión en package.json (ej. 2.0.0) y luego:
+git tag v2.0.0
+git push origin v2.0.0
+```
+
+Esto dispara 3 jobs en paralelo (macOS, Windows, Linux) que suben:
+
+| SO | Artefactos |
+|---|---|
+| 🪟 Windows | Instalador **NSIS `.exe`** |
+| 🍎 macOS | **`.dmg`** + **`.zip`** (x64 y arm64) |
+| 🐧 Linux | **`.AppImage`** + **`.deb`** |
+
+> Para **firmar/notarizar** agrega los secrets `CSC_LINK`, `CSC_KEY_PASSWORD` (mac/win) y `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` (notarización mac) en el repositorio. La publicación a GitHub usa el `GITHUB_TOKEN` automático.
+
+## 🧱 Arquitectura
+
+Clean Architecture: el dominio y los casos de uso no conocen Electron.
 
 ```
 src/
-├── core/                    # Lógica de negocio pura
-│   ├── domain/             # Entidades (Track, Playlist)
-│   └── application/        # Casos de uso y puertos
+├── core/                         # Lógica pura (sin Electron)
+│   ├── domain/entities/          # Track (youtube | local), Playlist
+│   └── application/
+│       ├── ports/                # PlayerPort, FileDialogPort, AuthPort, ...
+│       ├── services/             # QueueService, toPlayableMedia
+│       └── usecases/             # playback, playlists, auth, settings
 │
-├── main/                    # Main process (Electron)
-│   ├── main.ts             # Punto de entrada
-│   ├── di/                 # Inyección de dependencias
-│   ├── infra/              # Adaptadores (player, persistence, io)
-│   └── ipc/                # Comunicación IPC
+├── main/                         # Proceso principal (Electron)
+│   ├── main.ts                   # Ventana + servidor HTTP (player + streaming /media)
+│   ├── di/container.ts           # Inyección de dependencias
+│   ├── infra/
+│   │   ├── player/               # ElectronMediaPlayer (YouTube + local)
+│   │   ├── auth/                 # GoogleAuthAdapter (OAuth PKCE + loopback)
+│   │   ├── io/ persistence/ youtube/ system/
+│   └── ipc/                      # Canales y handlers
 │
-├── renderer/                # Renderer process (UI)
-│   ├── index.html          # Estructura HTML
-│   ├── styles.css          # Estilos CSS
-│   └── renderer.js         # Lógica de interfaz
+├── player/                       # WebContentsView del reproductor
+│   ├── player-http.html/.js      # Modo dual: iframe YouTube + <video> local
+│   └── player-preload.ts
 │
-├── player/                  # Ventana del reproductor YouTube
-│   ├── player-http.html    # HTML del player
-│   └── player-http.js      # YouTube IFrame API
-│
-└── preload/                 # Capa de seguridad
-    └── preload.ts          # API expuesta al renderer
+├── preload/preload.ts            # API segura expuesta al renderer
+└── renderer/                     # UI synthwave (index.html, styles.css, renderer.js)
 ```
 
-## Tecnologías
+### ¿Cómo reproduce archivos locales?
 
-- **Electron** - Framework de apps de escritorio
-- **TypeScript** - Tipado estático en el backend
-- **YouTube IFrame API** - Reproducción de videos
-- **JSON** - Persistencia local
-- **IPC** - Comunicación segura entre procesos
+El proceso principal levanta un pequeño servidor HTTP (`localhost:3456`) que ya servía el reproductor de YouTube. Se le añadió el endpoint **`/media?src=<ruta>`** que hace _streaming_ del archivo con soporte de **Range** (necesario para el _seek_). El `WebContentsView` reproduce YouTube (iframe) o archivos locales (`<video>`/`<audio>`) según la fuente de la pista, controlado por los mismos comandos play/pause/seek/volume.
 
-## Principio legal
+## ⚖️ Nota legal
 
-⚠️ **La app NO elimina anuncios ni modifica YouTube**
+Yutu **no** elimina anuncios ni modifica YouTube. Si usas YouTube Premium con sesión iniciada, no verás anuncios; de lo contrario, la reproducción es la normal de YouTube.
 
-- Usuario con **YouTube Premium** logueado → Sin anuncios
-- Usuario sin Premium → Reproducción normal con anuncios de YouTube
+## 🛠️ Tecnologías
 
-## Estructuras de datos
+Electron · TypeScript · YouTube IFrame API · OAuth 2.0 (PKCE) · electron-builder · electron-updater · GitHub Actions.
 
-### Track
-```typescript
-{
-  id: string;           // UUID único
-  provider: "youtube";
-  videoId: string;      // ID de 11 caracteres
-  title?: string;       // Título del video
-  author?: string;      // Canal/autor
-  addedAt: number;      // Timestamp
-}
-```
+---
 
-### Playlist
-```typescript
-{
-  id: string;
-  name: string;
-  createdAt: number;
-  updatedAt: number;
-  items: Track[];
-}
-```
-
-### Settings
-```typescript
-{
-  accentColor: string;    // Color hex (#RRGGBB)
-  volumeDefault: number;  // 0-100
-}
-```
-
-## Seguridad
-
-- ✅ **Context Isolation** habilitado
-- ✅ **Node Integration** deshabilitado
-- ✅ **Preload scripts** seguros
-- ✅ **IPC** para comunicación main ↔ renderer
-- ✅ Sin acceso directo a Node desde el renderer
-
-## Builds multiplataforma
-
-```bash
-npm run dist
-```
-
-Genera instaladores para:
-- 🪟 **Windows** - NSIS installer
-- 🍎 **macOS** - DMG + ZIP (Apple Silicon compatible)
-- 🐧 **Linux** - AppImage + deb
-
-## Configuración adicional
-
-### API de YouTube (Opcional)
-
-Para habilitar la búsqueda de videos, configura tu API key de YouTube:
-
-**Desde la aplicación (Recomendado):**
-1. Abre Configuración (⚙️)
-2. En "YouTube API Key", haz clic en "¿Cómo obtener una API Key?"
-3. Sigue los pasos para crear una API Key en Google Cloud Console
-4. Pega tu API Key y haz clic en "Guardar"
-
-**Pasos detallados para obtener API Key:**
-1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
-2. Crea un proyecto nuevo o selecciona uno existente
-3. Habilita **YouTube Data API v3** en la biblioteca de APIs
-4. Ve a **Credenciales** → **Crear credenciales** → **Clave de API**
-5. Copia la clave generada y guárdala en la app
-
-**Alternativamente con variable de entorno:**
-   ```bash
-   # Windows
-   set YOUTUBE_API_KEY=tu_api_key_aqui
-   
-   # macOS/Linux
-   export YOUTUBE_API_KEY=tu_api_key_aqui
-   ```
-
-**Nota:** Sin API key, la búsqueda no estará disponible pero puedes seguir agregando videos mediante URL directa.
-
-## Características implementadas
-
-✅ **Búsqueda integrada en YouTube** - Busca videos sin salir de la app  
-✅ **Thumbnails de videos** - Vista previa de todas las canciones  
-✅ **Media keys del teclado** - Control con teclas multimedia  
-✅ **Tray icon y mini player** - Control desde la bandeja del sistema  
-✅ **Auto-actualización** - Actualizaciones automáticas de la app
-
-
+Hecho con 💜 en modo synthwave.

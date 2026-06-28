@@ -2,14 +2,80 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <title>YT Player</title>
+    <title>Yutu Player</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #111; overflow: hidden; }
-      #player { width: 100%; height: 100%; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0a0613;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      #player, #localMedia { width: 100%; height: 100%; }
+      #localMedia { display: none; background: #0a0613; object-fit: contain; }
+
+      /* Synthwave "now playing" backdrop shown for local AUDIO (no video frame) */
+      #audioScene {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(120% 80% at 50% 18%, #2a1150 0%, #160a2e 45%, #0a0613 100%);
+        overflow: hidden;
+      }
+      #audioScene .sun {
+        position: absolute;
+        left: 50%;
+        top: 30%;
+        width: 220px;
+        height: 220px;
+        margin-left: -110px;
+        border-radius: 50%;
+        background: linear-gradient(180deg, #ffe26d 0%, #ff7ac6 55%, #b14bff 100%);
+        box-shadow: 0 0 80px 20px rgba(255, 90, 180, 0.45);
+      }
+      #audioScene .sun::after {
+        content: "";
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        height: 55%;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0 10px,
+          #160a2e 10px 16px
+        );
+        border-radius: 0 0 50% 50%;
+      }
+      #audioScene .grid {
+        position: absolute;
+        left: -50%;
+        right: -50%;
+        bottom: -10%;
+        height: 55%;
+        background-image:
+          linear-gradient(rgba(0, 240, 255, 0.5) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 60, 200, 0.4) 1px, transparent 1px);
+        background-size: 44px 44px;
+        transform: perspective(320px) rotateX(68deg);
+        animation: scroll 6s linear infinite;
+      }
+      @keyframes scroll {
+        from { background-position: 0 0; }
+        to { background-position: 0 44px; }
+      }
     </style>
   </head>
   <body>
+    <!-- YouTube iframe target -->
     <div id="player"></div>
+
+    <!-- Local file playback (audio + video) -->
+    <video id="localMedia" playsinline></video>
+    <div id="audioScene">
+      <div class="grid"></div>
+      <div class="sun"></div>
+    </div>
+
     <script src="player-http.js"></script>
     <script>
       // Load YouTube API after our script is ready

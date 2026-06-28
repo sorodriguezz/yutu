@@ -1,5 +1,19 @@
+import { MediaType, TrackProvider } from "../../domain/entities/Track";
+
+/**
+ * A provider-agnostic descriptor of something playable.
+ * The concrete adapter decides how to render it (YouTube iframe vs. <video>).
+ */
+export type PlayableMedia = {
+  provider: TrackProvider;
+  videoId?: string; // youtube
+  filePath?: string; // local
+  mediaType?: MediaType; // local
+  title?: string;
+};
+
 export interface PlayerPort {
-  load(videoId: string): Promise<void>;
+  load(media: PlayableMedia): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   seek(seconds: number): Promise<void>;

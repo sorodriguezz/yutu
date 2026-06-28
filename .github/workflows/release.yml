@@ -1,0 +1,50 @@
+name: Release
+
+# Lanza el build y publica los instaladores cuando se empuja un tag vX.Y.Z
+# (p. ej. `git tag v2.0.0 && git push origin v2.0.0`).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac     # genera .dmg + .zip (x64 y arm64)
+          - os: windows-latest
+            platform: win     # genera instalador .exe (NSIS)
+          - os: ubuntu-latest
+            platform: linux   # genera .AppImage + .deb
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile (TypeScript + assets)
+        run: npm run build
+
+      - name: Build & publish installers
+        run: npx electron-builder --${{ matrix.platform }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Para firmar en macOS/Windows agrega estos secrets en el repo:
+          # CSC_LINK / CSC_KEY_PASSWORD (mac/win), APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD (notarización)

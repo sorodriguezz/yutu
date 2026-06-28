@@ -1,5 +1,6 @@
 import { QueueService } from "../../services/QueueService";
 import { PlayerPort } from "../../ports/PlayerPort";
+import { toPlayableMedia } from "../../services/toPlayableMedia";
 
 export class Next {
   constructor(
@@ -11,7 +12,7 @@ export class Next {
     const next = this.queue.next();
     if (!next) return null;
 
-    await this.player.load(next.videoId);
+    await this.player.load(toPlayableMedia(next));
     await this.player.play();
     return next;
   }

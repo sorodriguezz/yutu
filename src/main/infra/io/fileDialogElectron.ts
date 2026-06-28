@@ -33,6 +33,31 @@ export class ElectronFileDialog implements FileDialogPort {
     return res.filePaths[0];
   }
 
+  async pickMediaFiles(): Promise<string[]> {
+    const win = this.getWindow();
+    if (!win) return [];
+
+    const res = await dialog.showOpenDialog(win, {
+      title: "Agregar música o videos",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "Audio y Video",
+          extensions: [
+            "mp3", "wav", "flac", "m4a", "aac", "ogg", "opus", "wma",
+            "mp4", "webm", "mkv", "mov", "avi", "m4v",
+          ],
+        },
+        { name: "Audio", extensions: ["mp3", "wav", "flac", "m4a", "aac", "ogg", "opus", "wma"] },
+        { name: "Video", extensions: ["mp4", "webm", "mkv", "mov", "avi", "m4v"] },
+        { name: "Todos los archivos", extensions: ["*"] },
+      ],
+    });
+
+    if (res.canceled || res.filePaths.length === 0) return [];
+    return res.filePaths;
+  }
+
   async readTextFile(path: string): Promise<string> {
     return fs.readFile(path, "utf-8");
   }

@@ -1,13 +1,20 @@
-// Player for HTTP server
-let player = null;
-let playerReady = false;
-let pendingCommands = [];
+// Dual-mode player: YouTube IFrame API + native <video>/<audio> for local files.
 
-window.onYouTubeIframeAPIReady = function() {
-  player = new YT.Player('player', {
+let ytPlayer = null;
+let ytReady = false;
+let pendingCommands = [];
+let currentMode = 'youtube'; // 'youtube' | 'local'
+let lastVolume = 60; // 0..100
+
+const localMedia = document.getElementById('localMedia');
+const audioScene = document.getElementById('audioScene');
+const ytContainer = document.getElementById('player');
+
+// ---------- YouTube ----------
+window.onYouTubeIframeAPIReady = function () {
+  ytPlayer = new YT.Player('player', {
     height: '100%',
     width: '100%',
-    videoId: 'dQw4w9WgXcQ', // Default video to initialize
     playerVars: {
       autoplay: 0,
       controls: 1,
@@ -17,36 +24,34 @@ window.onYouTubeIframeAPIReady = function() {
       origin: window.location.origin
     },
     events: {
-      onReady: onPlayerReady,
-      onStateChange: onPlayerStateChange,
-      onError: onPlayerError
+      onReady: onYtReady,
+      onStateChange: onYtStateChange,
+      onError: onYtError
     }
   });
 };
 
-function onPlayerReady(event) {
-  playerReady = true;
-  
-  // Execute any pending commands
+function onYtReady() {
+  ytReady = true;
   while (pendingCommands.length > 0) {
     const cmd = pendingCommands.shift();
-    cmd.fn();
+    cmd();
   }
-  
+
   setInterval(() => {
-    if (player && playerReady && player.getDuration) {
+    if (currentMode !== 'youtube') return;
+    if (ytPlayer && ytReady && ytPlayer.getDuration) {
       try {
-        const current = player.getCurrentTime() || 0;
-        const duration = player.getDuration() || 0;
-        if (window.playerApi) {
-          window.playerApi.sendTimeUpdate({ current, duration });
-        }
+        const current = ytPlayer.getCurrentTime() || 0;
+        const duration = ytPlayer.getDuration() || 0;
+        if (window.playerApi) window.playerApi.sendTimeUpdate({ current, duration });
       } catch (err) {}
     }
   }, 500);
 }
 
-function onPlayerStateChange(event) {
+function onYtStateChange(event) {
+  if (currentMode !== 'youtube') return;
   const states = { '-1': 'unstarted', '0': 'ended', '1': 'playing', '2': 'paused', '3': 'buffering', '5': 'cued' };
   const state = states[event.data] || 'unknown';
   if (window.playerApi) {
@@ -55,51 +60,124 @@ function onPlayerStateChange(event) {
   }
 }
 
-function onPlayerError(event) {
-  if (window.playerApi) window.playerApi.sendPlayerState('error');
+function onYtError() {
+  if (currentMode === 'youtube' && window.playerApi) window.playerApi.sendPlayerState('error');
 }
 
-// Register command listeners - wait for playerApi to be available
+// ---------- Local media ----------
+localMedia.addEventListener('timeupdate', () => {
+  if (currentMode !== 'local') return;
+  if (window.playerApi) {
+    window.playerApi.sendTimeUpdate({
+      current: localMedia.currentTime || 0,
+      duration: isFinite(localMedia.duration) ? localMedia.duration : 0
+    });
+  }
+});
+localMedia.addEventListener('play', () => {
+  if (currentMode === 'local' && window.playerApi) window.playerApi.sendPlayerState('playing');
+});
+localMedia.addEventListener('pause', () => {
+  if (currentMode === 'local' && window.playerApi) window.playerApi.sendPlayerState('paused');
+});
+localMedia.addEventListener('ended', () => {
+  if (currentMode === 'local' && window.playerApi) {
+    window.playerApi.sendPlayerState('ended');
+    window.playerApi.notifyEnded();
+  }
+});
+localMedia.addEventListener('error', () => {
+  if (currentMode === 'local' && window.playerApi) window.playerApi.sendPlayerState('error');
+});
+
+// ---------- Mode switching ----------
+function switchToYouTube() {
+  currentMode = 'youtube';
+  try { localMedia.pause(); } catch (e) {}
+  localMedia.removeAttribute('src');
+  localMedia.load();
+  localMedia.style.display = 'none';
+  audioScene.style.display = 'none';
+  ytContainer.style.display = 'block';
+}
+
+function switchToLocal(isVideo) {
+  currentMode = 'local';
+  try {
+    if (ytPlayer && ytReady) ytPlayer.pauseVideo();
+  } catch (e) {}
+  ytContainer.style.display = 'none';
+  localMedia.style.display = isVideo ? 'block' : 'none';
+  audioScene.style.display = isVideo ? 'none' : 'block';
+}
+
+// ---------- Command listeners ----------
 function registerCommandListeners() {
   if (!window.playerApi) {
     setTimeout(registerCommandListeners, 100);
     return;
   }
-  
-  window.playerApi.onLoad((videoId) => {
-    const executeLoad = () => {
-      if (player && playerReady) {
-        player.loadVideoById(videoId);
-      } else {
-        pendingCommands.push({ type: 'load', fn: executeLoad });
-      }
-    };
-    executeLoad();
+
+  window.playerApi.onLoad((media) => {
+    // Back-compat: a bare string means a YouTube videoId
+    if (typeof media === 'string') media = { provider: 'youtube', videoId: media };
+    media = media || {};
+
+    if (media.provider === 'local' && media.filePath) {
+      const isVideo = media.mediaType === 'video';
+      switchToLocal(isVideo);
+      const src = '/media?src=' + encodeURIComponent(media.filePath);
+      localMedia.src = src;
+      localMedia.volume = Math.max(0, Math.min(1, lastVolume / 100));
+      const tryPlay = () => { localMedia.play().catch(() => {}); };
+      localMedia.oncanplay = tryPlay;
+      tryPlay();
+    } else if (media.videoId) {
+      switchToYouTube();
+      const exec = () => {
+        if (ytPlayer && ytReady) ytPlayer.loadVideoById(media.videoId);
+        else pendingCommands.push(exec);
+      };
+      exec();
+    } else {
+      // Nada válido que reproducir (p. ej. item roto sin videoId/filePath):
+      // detener lo que esté sonando en vez de dejar el video por defecto.
+      try { if (ytPlayer && ytReady) ytPlayer.stopVideo(); } catch (e) {}
+      try { localMedia.pause(); } catch (e) {}
+      if (window.playerApi) window.playerApi.sendPlayerState('paused');
+    }
   });
-  
+
   window.playerApi.onPlay(() => {
-    const executePlay = () => {
-      if (player && playerReady) {
-        player.playVideo();
-      } else {
-        pendingCommands.push({ type: 'play', fn: executePlay });
-      }
-    };
-    executePlay();
+    if (currentMode === 'local') {
+      localMedia.play().catch(() => {});
+    } else {
+      const exec = () => {
+        if (ytPlayer && ytReady) ytPlayer.playVideo();
+        else pendingCommands.push(exec);
+      };
+      exec();
+    }
   });
-  
+
   window.playerApi.onPause(() => {
-    if (player && playerReady) player.pauseVideo();
+    if (currentMode === 'local') localMedia.pause();
+    else if (ytPlayer && ytReady) ytPlayer.pauseVideo();
   });
-  
+
   window.playerApi.onSeek((seconds) => {
-    if (player && playerReady) player.seekTo(seconds, true);
+    if (currentMode === 'local') {
+      try { localMedia.currentTime = seconds; } catch (e) {}
+    } else if (ytPlayer && ytReady) {
+      ytPlayer.seekTo(seconds, true);
+    }
   });
-  
+
   window.playerApi.onSetVolume((volume) => {
-    if (player && playerReady) player.setVolume(volume);
+    lastVolume = volume;
+    if (currentMode === 'local') localMedia.volume = Math.max(0, Math.min(1, volume / 100));
+    else if (ytPlayer && ytReady) ytPlayer.setVolume(volume);
   });
 }
 
-// Start trying to register listeners
 registerCommandListeners();

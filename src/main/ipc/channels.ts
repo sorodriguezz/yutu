@@ -18,6 +18,14 @@ export const Channels = {
 
   YouTube_Search: "youtube:search",
 
+  Local_PickAndEnqueue: "local:pickAndEnqueue",
+
+  Auth_SignIn: "auth:signIn",
+  Auth_SignOut: "auth:signOut",
+  Auth_GetProfile: "auth:getProfile",
+  Auth_ListYouTubePlaylists: "auth:listYouTubePlaylists",
+  Auth_ImportYouTubePlaylist: "auth:importYouTubePlaylist",
+
   Player_Play: "player:play",
   Player_Pause: "player:pause",
   Player_Seek: "player:seek",
@@ -26,6 +34,7 @@ export const Channels = {
   Settings_SetAccent: "settings:setAccent",
   Settings_SetVolumeDefault: "settings:setVolumeDefault",
   Settings_SetYouTubeApiKey: "settings:setYouTubeApiKey",
+  Settings_SetGoogleCredentials: "settings:setGoogleCredentials",
 
   Util_ParseVideoId: "util:parseVideoId",
 

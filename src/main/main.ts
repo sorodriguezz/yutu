@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView, session, protocol, ipcMain, net } from "electron";
+import { app, BrowserWindow, WebContentsView, session, protocol, ipcMain, net, shell } from "electron";
 import path from "node:path";
 import http from "node:http";
 import fs from "node:fs";
@@ -17,19 +17,92 @@ let mediaKeys: MediaKeysAdapter | null = null;
 let trayIcon: TrayIconAdapter | null = null;
 let autoUpdater: AutoUpdaterAdapter | null = null;
 
-// Create simple HTTP server for player
+// MIME types for local media streaming
+const MEDIA_MIME: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.wma': 'audio/x-ms-wma',
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
+  '.mov': 'video/quicktime',
+  '.avi': 'video/x-msvideo'
+};
+
+// Stream a local file with HTTP Range support (needed for seeking)
+function streamLocalFile(filePath: string, req: http.IncomingMessage, res: http.ServerResponse) {
+  fs.stat(filePath, (err, stat) => {
+    if (err || !stat.isFile()) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+
+    const total = stat.size;
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = MEDIA_MIME[ext] || 'application/octet-stream';
+    const range = req.headers.range;
+
+    if (range) {
+      const match = /bytes=(\d*)-(\d*)/.exec(range);
+      const start = match && match[1] ? parseInt(match[1], 10) : 0;
+      const end = match && match[2] ? parseInt(match[2], 10) : total - 1;
+      const safeEnd = Math.min(end, total - 1);
+      const chunkSize = safeEnd - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${safeEnd}/${total}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType
+      });
+      fs.createReadStream(filePath, { start, end: safeEnd }).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': total,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes'
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  });
+}
+
+// Create simple HTTP server for player + local media streaming
 function createPlayerServer() {
   const port = 3456;
   httpServer = http.createServer((req, res) => {
-    let filePath = path.join(__dirname, '..', 'player', req.url === '/' ? 'player-http.html' : req.url || '');
-    
-    if (req.url?.endsWith('.js')) {
+    const reqUrl = req.url || '/';
+    const parsed = new URL(reqUrl, `http://localhost:${port}`);
+
+    // Local media streaming endpoint: /media?src=<absolute file path>
+    if (parsed.pathname === '/media') {
+      const src = parsed.searchParams.get('src');
+      if (!src) {
+        res.writeHead(400);
+        res.end('Missing src');
+        return;
+      }
+      streamLocalFile(decodeURIComponent(src), req, res);
+      return;
+    }
+
+    const fileName = parsed.pathname === '/' ? 'player-http.html' : parsed.pathname;
+    let filePath = path.join(__dirname, '..', 'player', fileName);
+
+    if (fileName.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript');
-    } else if (req.url?.endsWith('.html')) {
-      res.setHeader('Content-Security-Policy', "default-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://i.ytimg.com https://s.ytimg.com 'unsafe-inline' 'unsafe-eval'; frame-src https://www.youtube.com https://www.youtube-nocookie.com;");
+    } else if (fileName.endsWith('.html')) {
+      res.setHeader('Content-Security-Policy', "default-src 'self' http://localhost:3456 https://www.youtube.com https://www.youtube-nocookie.com https://i.ytimg.com https://s.ytimg.com 'unsafe-inline' 'unsafe-eval'; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' http://localhost:3456 blob:;");
       res.setHeader('Content-Type', 'text/html');
     }
-    
+
     fs.readFile(filePath, (err, data) => {
       if (err) {
         res.writeHead(404);
@@ -40,9 +113,9 @@ function createPlayerServer() {
       res.end(data);
     });
   });
-  
+
   httpServer.listen(port);
-  
+
   return port;
 }
 
@@ -66,6 +139,24 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
 
+  // Abrir SIEMPRE los enlaces externos en el navegador por defecto del PC
+  // (nunca dentro de una ventana de la app). Esto también hace que el login
+  // de Google no se abra embebido (Google bloquea los webviews).
+  const isInternalUrl = (url: string) =>
+    url.startsWith("file:") || url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1");
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isInternalUrl(url)) return { action: "allow" };
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (e, url) => {
+    if (!isInternalUrl(url)) {
+      e.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   playerView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, "..", "player", "player-preload.js"),
@@ -82,6 +173,13 @@ function createWindow() {
   // Permitir todas las solicitudes de permisos (para YouTube)
   playerView.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
     callback(true);
+  });
+
+  // Cualquier ventana emergente del player (p. ej. "ver en YouTube") al navegador del PC
+  playerView.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1")) return { action: "allow" };
+    shell.openExternal(url);
+    return { action: "deny" };
   });
 
 

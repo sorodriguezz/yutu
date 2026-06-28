@@ -123,28 +123,91 @@ export class YouTubeSearchAdapter implements YouTubeSearchPort {
   }
 
   /**
-   * Fallback search without API key using oEmbed and basic scraping
+   * Search without an API key by scraping the results page (ytInitialData).
+   * No key required — works out of the box.
    */
   private async searchWithoutApi(
     query: string,
     maxResults: number
   ): Promise<YouTubeSearchResult[]> {
     try {
-      // Use YouTube's autocomplete/suggestions as a simple search
-      // This is a simplified version - in production you might want a better solution
-      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-        query
-      )}`;
+      const searchUrl =
+        `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}` +
+        `&hl=en&gl=US`;
 
-      // For now, return empty array and suggest user to add API key
-      console.warn(
-        "YouTube API key not configured. Add YOUTUBE_API_KEY to environment variables for search functionality."
-      );
-      return [];
+      const response = await fetch(searchUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept-Language": "en-US,en;q=0.9",
+          // Skip the EU consent interstitial that otherwise hides the results
+          Cookie: "CONSENT=YES+cb.20210328-17-p0.en+FX+000",
+        },
+      });
+
+      if (!response.ok) throw new Error(`YouTube responded ${response.status}`);
+      const html = await response.text();
+
+      // Extract the embedded ytInitialData JSON
+      let jsonStr: string | null = null;
+      let m = html.match(/var ytInitialData = (\{.+?\});<\/script>/s);
+      if (!m) m = html.match(/window\["ytInitialData"\]\s*=\s*(\{.+?\});<\/script>/s);
+      if (!m) m = html.match(/ytInitialData"\]\s*=\s*(\{.+?\});/s);
+      if (m) jsonStr = m[1];
+      if (!jsonStr) return [];
+
+      const data = JSON.parse(jsonStr);
+
+      // Recursively collect every videoRenderer node (robust to layout changes)
+      const renderers: any[] = [];
+      const walk = (node: any) => {
+        if (!node || typeof node !== "object" || renderers.length >= maxResults * 2) return;
+        if (node.videoRenderer && node.videoRenderer.videoId) renderers.push(node.videoRenderer);
+        if (Array.isArray(node)) {
+          for (const c of node) walk(c);
+        } else {
+          for (const k of Object.keys(node)) walk(node[k]);
+        }
+      };
+      walk(data);
+
+      const results: YouTubeSearchResult[] = [];
+      for (const v of renderers) {
+        if (results.length >= maxResults) break;
+        const videoId = v.videoId;
+        const title =
+          v.title?.runs?.[0]?.text || v.title?.simpleText || videoId;
+        const author =
+          v.ownerText?.runs?.[0]?.text ||
+          v.longBylineText?.runs?.[0]?.text ||
+          "YouTube";
+        const thumbs = v.thumbnail?.thumbnails;
+        const thumbnail =
+          (thumbs && thumbs[thumbs.length - 1]?.url) ||
+          `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+        const lengthText = v.lengthText?.simpleText || "";
+        results.push({
+          videoId,
+          title,
+          author,
+          thumbnail,
+          duration: this.parseClockDuration(lengthText),
+        });
+      }
+
+      return results;
     } catch (error) {
-      console.error("Error in fallback search:", error);
+      console.error("Error in keyless search:", error);
       return [];
     }
+  }
+
+  /** Parse "m:ss" or "h:mm:ss" into seconds. */
+  private parseClockDuration(text: string): number {
+    if (!text) return 0;
+    const parts = text.split(":").map((p) => parseInt(p, 10));
+    if (parts.some((n) => isNaN(n))) return 0;
+    return parts.reduce((acc, n) => acc * 60 + n, 0);
   }
 
   /**
