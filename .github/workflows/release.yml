@@ -1,19 +1,44 @@
 name: Release
 
-# Lanza el build y publica los instaladores cuando se empuja un tag vX.Y.Z
-# (p. ej. `git tag v2.0.0 && git push origin v2.0.0`).
+# Totalmente automático: con cada push a main se revisa la versión de package.json.
+# Si NO existe aún un release para esa versión, se construyen y publican los
+# instaladores de las 3 plataformas. Si ya existe, no hace nada.
+# => Para sacar un release nuevo solo sube la versión en package.json y haz push.
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main, master]
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 jobs:
+  check:
+    name: ¿Versión nueva?
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "El release v$VERSION ya existe. No se construye nada."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Versión nueva: v$VERSION. Se construirán los instaladores."
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
     name: Build ${{ matrix.platform }}
+    needs: check
+    if: needs.check.outputs.go == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -46,5 +71,5 @@ jobs:
         run: npx electron-builder --${{ matrix.platform }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Para firmar en macOS/Windows agrega estos secrets en el repo:
-          # CSC_LINK / CSC_KEY_PASSWORD (mac/win), APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD (notarización)
+          # Para firmar/notarizar agrega estos secrets en el repo:
+          # CSC_LINK / CSC_KEY_PASSWORD (mac/win), APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD (mac)

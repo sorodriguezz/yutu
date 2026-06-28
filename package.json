@@ -32,7 +32,8 @@
       {
         "provider": "github",
         "owner": "sorodriguezz",
-        "repo": "yutu"
+        "repo": "yutu",
+        "releaseType": "release"
       }
     ],
     "win": {
