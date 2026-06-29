@@ -4,13 +4,23 @@ Reproductor de escritorio (Electron + TypeScript, **Clean Architecture**) con es
 
 ![icono](build/icon.png)
 
-## ✨ Novedades (v2.0)
+## ✨ Características
 
 - 🎧 **Reproducción local** — agrega tus archivos `MP3, WAV, FLAC, M4A, AAC, OGG, OPUS` (audio) y `MP4, WEBM, MKV, MOV, AVI` (video) desde tu PC. Streaming local con soporte de _seek_ (HTTP Range).
+- 🏷️ **Metadatos embebidos** — lee título, artista, **álbum**, **año** y **carátula** desde las etiquetas del archivo y los muestra en la interfaz.
+- 🎚️ **Crossfade / gapless** — fundido configurable (0–12 s) entre canciones de audio local, con doble buffer de Web Audio. Ajústalo en **⚙ Ajustes**.
+- 📊 **Visualizador audio-reactivo** — barras en tiempo real (Web Audio `AnalyserNode`) que reaccionan al audio local, con glow y reflejo synthwave.
 - 🔴 **YouTube** — pega cualquier URL/ID o busca con tu API Key. Reproducción vía YouTube IFrame API.
+- 🟣 **Modo YouTube Music** — abre la web real de YouTube Music embebida (con login persistente) desde la barra superior, con **bloqueo de anuncios** integrado.
+- ⬇️ **Descarga a MP3** — botón de descarga en cada pista de YouTube y en el modo YT Music; usa yt-dlp + ffmpeg y guarda el archivo en tu biblioteca local.
 - 🟢 **Login con Google (OAuth 2.0 + PKCE)** — inicia sesión de forma segura (navegador del sistema + loopback). Importa tus **playlists de YouTube** a playlists locales.
-- 🎨 **Rediseño 360 synthwave** — sol neón, grid en perspectiva animado, scanlines, glassmorphism, glow y tipografía Orbitron. Badges por fuente (YouTube / Local), ecualizador animado y vinilo girando.
-- 📦 **Releases automáticos** — GitHub Actions construye y publica instaladores para **Windows (.exe)**, **macOS (.dmg + .zip, Intel y Apple Silicon)** y **Linux (.AppImage + .deb)**.
+- 🎨 **Paletas synthwave + color libre** — varios esquemas neón (Miami, Outrun, Vaporwave, Cyberpunk, Midnight, Laser) o tu propio color de acento.
+- 🌐 **Bilingüe (ES / EN)** — interfaz traducida con cambio de idioma en caliente.
+- ⏰ **Temporizador de apagado** — pausa la reproducción automáticamente a los 15, 30, 45 o 60 minutos.
+- ⌨️ **Atajos de teclado y teclas multimedia** — controla la reproducción sin el mouse (pulsa `?` para ver la lista).
+- 🔔 **Notificaciones de escritorio** — aviso al cambiar de canción.
+- 🔄 **Actualizaciones automáticas** — la app se actualiza sola vía electron-updater.
+- 🕹️ **Diseño synthwave** — sol neón, grid en perspectiva animado, scanlines, glassmorphism, glow y tipografía Orbitron. Badges por fuente (YouTube / Local) y vinilo girando.
 
 ## 🚀 Desarrollo
 
@@ -18,7 +28,7 @@ Reproductor de escritorio (Electron + TypeScript, **Clean Architecture**) con es
 npm install        # dependencias
 npm start          # compila y abre la app
 npm run build      # solo compilar (tsc + copia de assets)
-npm run dist       # generar instaladores para tu plataforma actual
+npm run dist       # generar instalador para tu plataforma actual
 ```
 
 ## 🎵 Cómo usar
@@ -31,7 +41,23 @@ npm run dist       # generar instaladores para tu plataforma actual
 | Importar/Exportar playlist | Sidebar → **Importar** · ⬇ en cada playlist |
 | Iniciar sesión Google | Sidebar → **Conectar con Google** |
 | Importar playlists de YouTube | Perfil → botón **YT** |
+| Temporizador de apagado | Barra superior → ⏰ |
+| Ver atajos de teclado | Pulsa **?** |
 | Color de acento, volumen, claves | Barra superior → ⚙ Ajustes |
+
+### ⌨️ Atajos de teclado
+
+| Tecla | Acción |
+|---|---|
+| `Espacio` | Play / Pausa |
+| `→` / `←` | Siguiente / Anterior |
+| `↑` / `↓` | Subir / bajar volumen |
+| `M` | Silenciar |
+| `S` | Aleatorio (shuffle) |
+| `R` | Repetir |
+| `/` | Ir al buscador de YouTube |
+| `?` | Mostrar atajos |
+| `Esc` | Cerrar menús/ventanas |
 
 ## 🔐 Configurar el login con Google
 
@@ -53,24 +79,18 @@ Para la búsqueda integrada: **⚙ Ajustes → YouTube API Key** (crea una _API 
 
 ## 📦 Publicar un release
 
-Los workflows están en `.github/workflows/`:
-
-- **`ci.yml`** — compila el proyecto en cada push/PR (verifica tipos).
-- **`release.yml`** — al empujar un tag `vX.Y.Z` construye y publica los instaladores en _GitHub Releases_.
+El release es **automático**: cada push a `main` revisa la versión de `package.json`. Si **no** existe aún un release para esa versión, se construyen y publican los instaladores; si ya existe, no hace nada.
 
 ```bash
-# Sube la versión en package.json (ej. 2.0.0) y luego:
-git tag v2.0.0
-git push origin v2.0.0
+# 1) Sube la versión en package.json (ej. 2.1.0 → 2.2.0)
+# 2) Haz push a main:
+git push origin main
 ```
 
-Esto dispara 3 jobs en paralelo (macOS, Windows, Linux) que suben:
+Los workflows están en `.github/workflows/`:
 
-| SO | Artefactos |
-|---|---|
-| 🪟 Windows | Instalador **NSIS `.exe`** |
-| 🍎 macOS | **`.dmg`** + **`.zip`** (x64 y arm64) |
-| 🐧 Linux | **`.AppImage`** + **`.deb`** |
+- **`ci.yml`** — compila el proyecto en cada push/PR (verifica tipos + assets).
+- **`release.yml`** — al detectar una versión nueva en `main`, construye y publica los instaladores en _GitHub Releases_ (3 jobs en paralelo: macOS, Windows y Linux).
 
 > Para **firmar/notarizar** agrega los secrets `CSC_LINK`, `CSC_KEY_PASSWORD` (mac/win) y `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` (notarización mac) en el repositorio. La publicación a GitHub usa el `GITHUB_TOKEN` automático.
 
@@ -81,7 +101,10 @@ Clean Architecture: el dominio y los casos de uso no conocen Electron.
 ```
 src/
 ├── core/                         # Lógica pura (sin Electron)
-│   ├── domain/entities/          # Track (youtube | local), Playlist
+│   ├── domain/
+│   │   ├── entities/             # Track (youtube | local), Playlist
+│   │   ├── valueObjects/         # tipos/valores del dominio
+│   │   └── errors/               # errores de dominio
 │   └── application/
 │       ├── ports/                # PlayerPort, FileDialogPort, AuthPort, ...
 │       ├── services/             # QueueService, toPlayableMedia
@@ -93,7 +116,9 @@ src/
 │   ├── infra/
 │   │   ├── player/               # ElectronMediaPlayer (YouTube + local)
 │   │   ├── auth/                 # GoogleAuthAdapter (OAuth PKCE + loopback)
-│   │   ├── io/ persistence/ youtube/ system/
+│   │   ├── system/               # teclas multimedia, auto-updater
+│   │   ├── logging/ util/
+│   │   └── io/ persistence/ youtube/
 │   └── ipc/                      # Canales y handlers
 │
 ├── player/                       # WebContentsView del reproductor
@@ -108,9 +133,13 @@ src/
 
 El proceso principal levanta un pequeño servidor HTTP (`localhost:3456`) que ya servía el reproductor de YouTube. Se le añadió el endpoint **`/media?src=<ruta>`** que hace _streaming_ del archivo con soporte de **Range** (necesario para el _seek_). El `WebContentsView` reproduce YouTube (iframe) o archivos locales (`<video>`/`<audio>`) según la fuente de la pista, controlado por los mismos comandos play/pause/seek/volume.
 
-## ⚖️ Nota legal
+## ⚖️ Nota legal y descargo de responsabilidad
 
-Yutu **no** elimina anuncios ni modifica YouTube. Si usas YouTube Premium con sesión iniciada, no verás anuncios; de lo contrario, la reproducción es la normal de YouTube.
+Yutu es un proyecto independiente, **sin afiliación** con Google, YouTube ni YouTube Music.
+
+El **modo YouTube Music**, el **bloqueo de anuncios** y la **descarga a MP3** son funciones que pueden **infringir los Términos de Servicio de Google/YouTube** y, según el contenido y tu jurisdicción, leyes de copyright. Estas funciones se ofrecen "tal cual", para uso personal y bajo tu propia responsabilidad. Úsalas solo con contenido que tengas derecho a descargar (propio, de dominio público, con licencia Creative Commons, etc.). El bloqueo de anuncios puede desactivarse en **⚙ Ajustes**.
+
+La descarga requiere **yt-dlp** (se descarga automáticamente la primera vez) y **ffmpeg** (incluido vía `ffmpeg-static`).
 
 ## 🛠️ Tecnologías
 

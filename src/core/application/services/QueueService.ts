@@ -90,6 +90,29 @@ export class QueueService {
     return this.queue[this.index];
   }
 
+  // Mueve el índice sin tocar la cola (usado por el crossfade, que ya
+  // cargó la siguiente pista en el player y solo necesita sincronizar estado).
+  setIndex(idx: number) {
+    if (idx >= 0 && idx < this.queue.length) this.index = idx;
+  }
+
+  // Devuelve qué pista seguiría (y su índice) SIN mutar el estado.
+  // Para shuffle elige un índice al azar que el llamador debe confirmar con setIndex.
+  peekNext(): { track: Track; index: number } | null {
+    if (this.queue.length === 0) return null;
+    if (this.repeat === "one") return { track: this.queue[this.index], index: this.index };
+    if (this.shuffle) {
+      const idx = Math.floor(Math.random() * this.queue.length);
+      return { track: this.queue[idx], index: idx };
+    }
+    const ni = this.index + 1;
+    if (ni >= this.queue.length) {
+      if (this.repeat === "all") return { track: this.queue[0], index: 0 };
+      return null;
+    }
+    return { track: this.queue[ni], index: ni };
+  }
+
   next(): Track | null {
     if (this.queue.length === 0) return null;
 

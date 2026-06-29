@@ -18,6 +18,145 @@ let volumeBeforeMute = 60;
 let lastQueueHash = '';
 let isSeeking = false;
 
+// ════ i18n (es / en) ══════════════════════════════════════
+let lang = 'es';
+const I18N = {
+  es: {
+    now_playing: 'REPRODUCIENDO AHORA', nothing_playing: 'Nada sonando',
+    add_music_hint: 'Agrega música local o de YouTube para empezar',
+    local_files: 'Archivos locales', local_files_desc: 'MP3 · MP4 de tu PC',
+    import_playlist: 'Importar playlist', import_playlist_desc: 'Desde archivo .json',
+    your_library: 'Tu biblioteca', create_playlist: 'Crear playlist', new_playlist: 'Nueva playlist…',
+    search_placeholder: 'Busca en YouTube o pega una URL…', search: 'Buscar', add_url: '+ URL',
+    toggle_video: 'Mostrar / ocultar video', sleep_timer: 'Temporizador de apagado',
+    shortcuts_title: 'Atajos de teclado (?)', settings: 'Ajustes', results: 'Resultados',
+    queue_title: 'Cola de reproducción', filter: 'Filtrar…',
+    palette: 'Paleta synthwave', palette_desc: 'Elige un esquema neón',
+    custom_color: 'Color personalizado', custom_color_desc: 'Define tu propio acento',
+    language: 'Idioma', language_desc: 'Idioma de la interfaz',
+    crossfade: 'Crossfade', crossfade_desc: 'Fundido entre canciones (audio local)',
+    initial_volume: 'Volumen inicial', initial_volume_desc: 'Al abrir la app',
+    equalizer: 'Ecualizador', equalizer_desc: 'Solo para archivos locales', reset: 'Reset',
+    eq_bass: 'Graves', eq_lowmid: 'Medio-bajo', eq_mid: 'Medios', eq_himid: 'Medio-alto', eq_treble: 'Agudos',
+    added_to_queue: 'Agregado a la cola', save_to_playlist_q: '¿Guardarla también en una playlist?', no_thanks: 'No, gracias',
+    off: 'Off', track_one: 'pista', track_other: 'pistas', local_file: 'Archivo local',
+    no_playlists: 'No tienes playlists todavía.', no_playlists_yet: 'Sin playlists aún',
+    queue_empty: 'Cola vacía. Agrega música local o de YouTube.', playlist_empty: 'Playlist vacía.',
+    no_matches: 'Sin coincidencias para “{q}”.',
+    searching: 'Buscando en YouTube…', no_results: 'Sin resultados. Intenta con otra búsqueda.', search_error: 'Error al buscar.',
+    play_all: 'Reproducir todo', shuffle: 'Aleatorio', to_queue: 'Cola',
+    shortcuts_heading: 'Atajos de teclado',
+    sc_playpause: 'Reproducir / Pausar', sc_nextprev: 'Siguiente / Anterior', sc_volume: 'Subir / bajar volumen',
+    sc_mute: 'Silenciar', sc_shuffle: 'Aleatorio', sc_repeat: 'Repetir', sc_search: 'Ir a la búsqueda', sc_help: 'Esta ayuda', sc_close: 'Cerrar',
+    sleep_15: '15 minutos', sleep_30: '30 minutos', sleep_45: '45 minutos', sleep_60: '1 hora', sleep_cancel: 'Cancelar',
+    t_files_added: '🎧 {n} archivo(s) agregado(s)', t_pl_created: '✅ Playlist creada', t_pl_imported: '✅ Playlist importada',
+    t_pl_deleted: '🗑 Playlist eliminada', t_added_queue: '➕ Agregada a la cola', t_fav_added: '💜 Agregado a favoritos',
+    t_fav_removed: '🤍 Quitado de favoritos', t_pl_exported: '⬇ Playlist exportada', t_need_url: '⚠️ Ingresa una URL o ID',
+    t_added_pl: '✅ Agregado a playlist', confirm_delete_pl: '¿Eliminar esta playlist?',
+    open_ytmusic: 'YouTube Music', back_to_yutu: 'Volver a Yutu', ads_blocked: 'Anuncios bloqueados',
+    download: 'Descargar', download_mp3: 'Descargar MP3',
+    ytm_page_back: 'Atrás', ytm_home: 'Inicio de YouTube Music',
+    block_ads: 'Bloquear anuncios', block_ads_desc: 'En el modo YouTube Music',
+    download_folder: 'Carpeta de descargas', choose: 'Elegir', open_folder: 'Abrir carpeta',
+    t_dl_start: '⬇ Preparando descarga…', t_dl_downloading: 'Descargando', t_dl_converting: 'Convirtiendo a MP3',
+    t_dl_done: '✅ Descargado a tu biblioteca', t_dl_error: 'Error al descargar',
+  },
+  en: {
+    now_playing: 'NOW PLAYING', nothing_playing: 'Nothing playing',
+    add_music_hint: 'Add local or YouTube music to get started',
+    local_files: 'Local files', local_files_desc: 'MP3 · MP4 from your PC',
+    import_playlist: 'Import playlist', import_playlist_desc: 'From a .json file',
+    your_library: 'Your library', create_playlist: 'Create playlist', new_playlist: 'New playlist…',
+    search_placeholder: 'Search YouTube or paste a URL…', search: 'Search', add_url: '+ URL',
+    toggle_video: 'Show / hide video', sleep_timer: 'Sleep timer',
+    shortcuts_title: 'Keyboard shortcuts (?)', settings: 'Settings', results: 'Results',
+    queue_title: 'Play queue', filter: 'Filter…',
+    palette: 'Synthwave palette', palette_desc: 'Pick a neon scheme',
+    custom_color: 'Custom color', custom_color_desc: 'Define your own accent',
+    language: 'Language', language_desc: 'Interface language',
+    crossfade: 'Crossfade', crossfade_desc: 'Fade between tracks (local audio)',
+    initial_volume: 'Initial volume', initial_volume_desc: 'When the app opens',
+    equalizer: 'Equalizer', equalizer_desc: 'Local files only', reset: 'Reset',
+    eq_bass: 'Bass', eq_lowmid: 'Low-mid', eq_mid: 'Mids', eq_himid: 'High-mid', eq_treble: 'Treble',
+    added_to_queue: 'Added to queue', save_to_playlist_q: 'Save it to a playlist too?', no_thanks: 'No, thanks',
+    off: 'Off', track_one: 'track', track_other: 'tracks', local_file: 'Local file',
+    no_playlists: "You don't have playlists yet.", no_playlists_yet: 'No playlists yet',
+    queue_empty: 'Queue is empty. Add local or YouTube music.', playlist_empty: 'Empty playlist.',
+    no_matches: 'No matches for “{q}”.',
+    searching: 'Searching YouTube…', no_results: 'No results. Try another search.', search_error: 'Search error.',
+    play_all: 'Play all', shuffle: 'Shuffle', to_queue: 'Queue',
+    shortcuts_heading: 'Keyboard shortcuts',
+    sc_playpause: 'Play / Pause', sc_nextprev: 'Next / Previous', sc_volume: 'Volume up / down',
+    sc_mute: 'Mute', sc_shuffle: 'Shuffle', sc_repeat: 'Repeat', sc_search: 'Go to search', sc_help: 'This help', sc_close: 'Close',
+    sleep_15: '15 minutes', sleep_30: '30 minutes', sleep_45: '45 minutes', sleep_60: '1 hour', sleep_cancel: 'Cancel',
+    t_files_added: '🎧 {n} file(s) added', t_pl_created: '✅ Playlist created', t_pl_imported: '✅ Playlist imported',
+    t_pl_deleted: '🗑 Playlist deleted', t_added_queue: '➕ Added to queue', t_fav_added: '💜 Added to favorites',
+    t_fav_removed: '🤍 Removed from favorites', t_pl_exported: '⬇ Playlist exported', t_need_url: '⚠️ Enter a URL or ID',
+    t_added_pl: '✅ Added to playlist', confirm_delete_pl: 'Delete this playlist?',
+    open_ytmusic: 'YouTube Music', back_to_yutu: 'Back to Yutu', ads_blocked: 'Ads blocked',
+    download: 'Download', download_mp3: 'Download MP3',
+    ytm_page_back: 'Back', ytm_home: 'YouTube Music home',
+    block_ads: 'Block ads', block_ads_desc: 'In YouTube Music mode',
+    download_folder: 'Download folder', choose: 'Choose', open_folder: 'Open folder',
+    t_dl_start: '⬇ Preparing download…', t_dl_downloading: 'Downloading', t_dl_converting: 'Converting to MP3',
+    t_dl_done: '✅ Downloaded to your library', t_dl_error: 'Download error',
+  }
+};
+function tr(key, vars) {
+  const table = I18N[lang] || I18N.es;
+  let s = (table[key] != null) ? table[key] : (I18N.es[key] != null ? I18N.es[key] : key);
+  if (vars) for (const k in vars) s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), vars[k]);
+  return s;
+}
+function trackCount(n) {
+  return n + ' ' + (n === 1 ? tr('track_one') : tr('track_other'));
+}
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tr(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.setAttribute('placeholder', tr(el.getAttribute('data-i18n-placeholder'))); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.setAttribute('title', tr(el.getAttribute('data-i18n-title'))); });
+  document.documentElement.lang = lang;
+  updateLangSeg();
+  render();
+}
+function updateLangSeg() {
+  document.querySelectorAll('#langSeg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+}
+window.setLanguage = async function (l) {
+  if (l !== 'es' && l !== 'en') return;
+  lang = l; state.settings.language = l;
+  applyI18n();
+  try { await window.api.setLanguage(l); } catch (e) {}
+};
+
+// ════ Paletas synthwave ════════════════════════════════════
+const PALETTES = [
+  { id: 'miami',     name: 'Miami',     accent: '#ff2e97', secondary: '#00e5ff' },
+  { id: 'outrun',    name: 'Outrun',    accent: '#ff6a3d', secondary: '#b14bff' },
+  { id: 'vaporwave', name: 'Vaporwave', accent: '#ff71ce', secondary: '#01cdfe' },
+  { id: 'cyber',     name: 'Cyberpunk', accent: '#fcee0a', secondary: '#ff005c' },
+  { id: 'midnight',  name: 'Midnight',  accent: '#5b8cff', secondary: '#ff5ab4' },
+  { id: 'laser',     name: 'Laser',     accent: '#16f5a7', secondary: '#b14bff' },
+];
+function renderPalettes() {
+  const grid = $('paletteGrid'); if (!grid) return;
+  grid.innerHTML = PALETTES.map(p => `
+    <button class="palette-swatch ${state.settings.palette === p.id ? 'active' : ''}" title="${p.name}"
+      onclick="selectPalette('${p.id}')" style="--sw1:${p.accent};--sw2:${p.secondary}">
+      <span class="palette-name">${escapeHtml(p.name)}</span>
+    </button>`).join('');
+}
+window.selectPalette = async function (id) {
+  const p = PALETTES.find(x => x.id === id); if (!p) return;
+  state.settings.palette = id;
+  state.settings.accentColor = p.accent;
+  state.settings.accentSecondary = p.secondary;
+  applyAccent(p.accent, p.secondary);
+  if ($('accentColor')) $('accentColor').value = p.accent;
+  renderPalettes();
+  try { await window.api.setTheme({ accentColor: p.accent, accentSecondary: p.secondary, palette: id }); } catch (e) {}
+};
+
 // Signature of the queue so the 1s background sync doesn't re-render
 // (and destroy open dropdowns) when nothing actually changed.
 function queueHash(q) {
@@ -71,6 +210,16 @@ function formatTime(seconds) {
 }
 
 function isLocal(track) { return track && track.provider === 'local'; }
+
+// Línea de metadatos del hero: artista · álbum · año (usa lo que haya).
+function metaLine(track) {
+  if (!track) return '';
+  const parts = [];
+  parts.push(track.author || (isLocal(track) ? tr('local_file') : 'YouTube'));
+  if (track.album) parts.push(track.album);
+  if (track.year) parts.push(String(track.year));
+  return parts.filter(Boolean).join(' · ');
+}
 
 function trackThumb(track) {
   if (!track) return null;
@@ -171,8 +320,11 @@ async function loadState() {
       repeat: q.repeat || 'off'
     };
 
-    applyAccent(state.settings.accentColor || '#ff2e97');
+    lang = (state.settings.language === 'en') ? 'en' : 'es';
+    applyAccent(state.settings.accentColor || '#ff2e97', state.settings.accentSecondary || '');
     initSettingsUI();
+    renderPalettes();
+    applyI18n();
 
     fetchMetadataForTracks(state.queue.items).then(() => render());
   } catch (err) { console.error('loadState', err); }
@@ -207,7 +359,9 @@ function hslToRgb(h, s, l) {
 
 // Deriva una paleta synthwave armónica del color de acento:
 // acento (primario) + complementario (pop) + sombra del mismo tono (profundidad).
-function applyAccent(color) {
+// secondary (opcional): neón secundario explícito de la paleta. Si no se da,
+// se deriva el complementario del acento (comportamiento clásico).
+function applyAccent(color, secondary) {
   const root = document.documentElement.style;
   const [ar, ag, ab] = hexToRgb(color);
   const [h, s, l] = rgbToHsl(ar, ag, ab);
@@ -220,9 +374,14 @@ function applyAccent(color) {
   const soft = hslToRgb(h, Math.min(s, 95), Math.min(l + 16, 88));
   root.setProperty('--neon-pink-soft', `rgb(${soft[0]}, ${soft[1]}, ${soft[2]})`);
 
-  const comp = hslToRgb(h + 180, Math.max(s, 72), 58); // complementario vibrante
-  root.setProperty('--neon-cyan', `rgb(${comp[0]}, ${comp[1]}, ${comp[2]})`);
-  root.setProperty('--cyan-rgb', `${comp[0]}, ${comp[1]}, ${comp[2]}`);
+  let cr, cg, cb;
+  if (secondary && /^#/.test(secondary)) {
+    [cr, cg, cb] = hexToRgb(secondary);
+  } else {
+    [cr, cg, cb] = hslToRgb(h + 180, Math.max(s, 72), 58); // complementario vibrante
+  }
+  root.setProperty('--neon-cyan', `rgb(${cr}, ${cg}, ${cb})`);
+  root.setProperty('--cyan-rgb', `${cr}, ${cg}, ${cb}`);
 
   const deep = hslToRgb(h, Math.max(s - 6, 45), Math.max(l - 26, 24)); // sombra para gradientes
   root.setProperty('--neon-purple', `rgb(${deep[0]}, ${deep[1]}, ${deep[2]})`);
@@ -234,6 +393,16 @@ function initSettingsUI() {
   if ($('accentColor')) $('accentColor').value = s.accentColor || '#ff2e97';
   if ($('volumeDefault')) { $('volumeDefault').value = s.volumeDefault; updateSlider($('volumeDefault'), s.volumeDefault, 100); }
   if ($('volumeDefaultLabel')) $('volumeDefaultLabel').textContent = s.volumeDefault;
+
+  const cfv = s.crossfadeSec != null ? s.crossfadeSec : 5;
+  const cf = $('crossfade');
+  if (cf) { cf.value = cfv; updateSlider(cf, cfv, 12); }
+  if ($('crossfadeLabel')) $('crossfadeLabel').textContent = cfv === 0 ? tr('off') : cfv + 's';
+
+  const blockAds = s.blockAds !== false; // por defecto activado
+  if ($('blockAds')) $('blockAds').checked = blockAds;
+  const chip = $('ytmAdChip'); if (chip) chip.style.display = blockAds ? '' : 'none';
+  if ($('downloadDirLabel')) $('downloadDirLabel').textContent = s.downloadDir || 'Música/Yutu';
 
   const vol = $('volume'); const volLabel = $('volumeLabel');
   if (vol) { vol.value = s.volumeDefault; updateSlider(vol, s.volumeDefault, 100); }
@@ -298,13 +467,32 @@ function setupEventListeners() {
   }
 
   if ($('accentColor')) $('accentColor').oninput = async (e) => {
-    applyAccent(e.target.value); await window.api.setAccentColor(e.target.value); state.settings.accentColor = e.target.value;
+    const color = e.target.value;
+    applyAccent(color, ''); // color libre → complementario derivado
+    state.settings.accentColor = color;
+    state.settings.accentSecondary = undefined;
+    state.settings.palette = 'custom';
+    renderPalettes();
+    try { await window.api.setTheme({ accentColor: color, accentSecondary: '', palette: 'custom' }); } catch (err) {}
   };
   if ($('volumeDefault')) $('volumeDefault').oninput = async (e) => {
     const v = parseInt(e.target.value);
     if ($('volumeDefaultLabel')) $('volumeDefaultLabel').textContent = v;
     updateSlider($('volumeDefault'), v, 100);
     await window.api.setVolumeDefault(v); state.settings.volumeDefault = v;
+  };
+  if ($('crossfade')) $('crossfade').oninput = async (e) => {
+    const v = parseInt(e.target.value);
+    if ($('crossfadeLabel')) $('crossfadeLabel').textContent = v === 0 ? tr('off') : v + 's';
+    updateSlider($('crossfade'), v, 12);
+    state.settings.crossfadeSec = v;
+    try { await window.api.setCrossfade(v); } catch (err) {}
+  };
+  if ($('blockAds')) $('blockAds').onchange = async (e) => {
+    const on = !!e.target.checked;
+    state.settings.blockAds = on;
+    const chip = $('ytmAdChip'); if (chip) chip.style.display = on ? '' : 'none';
+    try { await window.api.setBlockAds(on); } catch (err) {}
   };
 
   // delegated add-to-playlist select
@@ -320,6 +508,7 @@ function setupEventListeners() {
   window.api.onPlayerState((s) => { setPlaying(s === 'playing'); });
   window.api.onTimeUpdate((d) => { state.playback.currentTime = d.current; state.playback.duration = d.duration; });
   if (window.api.onLevels) window.api.onLevels((levels) => renderVisualizer(levels));
+  if (window.api.onDownloadProgress) window.api.onDownloadProgress((p) => showDownloadProgress(p));
   window.api.onQueueUpdate((q) => {
     const nq = { items: q.queue || [], currentIndex: q.index ?? -1, shuffle: !!q.shuffle, repeat: q.repeat || 'off' };
     const h = queueHash(nq);
@@ -364,7 +553,7 @@ function setPlaying(playing) {
 window.addLocalFiles = async function () {
   try {
     const res = await window.api.addLocalFiles();
-    if (res && res.added > 0) { await loadState(); render(); showToast(`🎧 ${res.added} archivo(s) agregado(s)`); }
+    if (res && res.added > 0) { await loadState(); render(); showToast(tr('t_files_added', { n: res.added })); }
   } catch (err) { showToast('❌ ' + err.message); }
 };
 
@@ -379,22 +568,22 @@ window.createPlaylist = async function () {
   const input = $('newPlaylistName');
   const name = input ? input.value.trim() : '';
   if (!name) return;
-  try { await window.api.createPlaylist(name); input.value = ''; await loadState(); render(); showToast('✅ Playlist creada'); }
+  try { await window.api.createPlaylist(name); input.value = ''; await loadState(); render(); showToast(tr('t_pl_created')); }
   catch (err) { showToast('❌ ' + err.message); }
 };
 
 window.importPlaylist = async function () {
-  try { await window.api.importPlaylist(); await loadState(); render(); showToast('✅ Playlist importada'); }
+  try { await window.api.importPlaylist(); await loadState(); render(); showToast(tr('t_pl_imported')); }
   catch (err) { showToast('❌ ' + err.message); }
 };
 
 window.deletePlaylist = function (id) {
-  showConfirm('¿Eliminar esta playlist?', async () => {
+  showConfirm(tr('confirm_delete_pl'), async () => {
     try {
       await window.api.deletePlaylist(id);
       // si estabas viendo esa playlist, vuelve a la cola (la reproducción NO se toca)
       if (state.selectedPlaylist && state.selectedPlaylist.id === id) { state.selectedPlaylist = null; state.viewMode = 'queue'; }
-      await loadState(); render(); showToast('🗑 Playlist eliminada');
+      await loadState(); render(); showToast(tr('t_pl_deleted'));
     } catch (err) { showToast('❌ ' + err.message); }
   });
 };
@@ -425,7 +614,7 @@ window.setCover = async function (id, emoji) {
 };
 
 window.exportPlaylist = async function (id) {
-  try { await window.api.exportPlaylist(id); showToast('⬇ Playlist exportada'); }
+  try { await window.api.exportPlaylist(id); showToast(tr('t_pl_exported')); }
   catch (err) { showToast('❌ ' + err.message); }
 };
 
@@ -467,7 +656,7 @@ window.removeFromQueue = async function (index) {
 
 // Agregar la playlist al final de la cola (sin reemplazar)
 window.appendPlaylist = async function (id) {
-  try { await window.api.appendPlaylistToQueue(id); showToast('➕ Agregada a la cola'); }
+  try { await window.api.appendPlaylistToQueue(id); showToast(tr('t_added_queue')); }
   catch (err) { showToast('❌ ' + err.message); }
 };
 
@@ -480,9 +669,9 @@ window.playShuffle = async function (id) {
 // Agregar UNA pista a la cola (desde la vista de playlist)
 window.enqueueOne = async function (index, source) {
   const list = (source === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.items : state.queue.items;
-  const t = list[index];
-  if (!t) return;
-  try { await window.api.appendTrackToQueue(trackPayload(t)); showToast('➕ Agregada a la cola'); }
+  const tk = list[index];
+  if (!tk) return;
+  try { await window.api.appendTrackToQueue(trackPayload(tk)); showToast(tr('t_added_queue')); }
   catch (err) { showToast('❌ ' + err.message); }
 };
 
@@ -500,7 +689,7 @@ window.togglePlayPause = async function () {
 window.addToQueue = async function () {
   const input = $('ytInput');
   const value = input ? input.value.trim() : '';
-  if (!value) { showToast('⚠️ Ingresa una URL o ID'); return; }
+  if (!value) { showToast(tr('t_need_url')); return; }
   // ¿Es una playlist de YouTube? → impórtala como playlist local
   if (/[?&]list=/.test(value) && /youtu\.?be/.test(value)) {
     input.value = '';
@@ -569,14 +758,14 @@ window.addPendingToPlaylist = async function (pid) {
   if (!pendingTrack) return;
   try {
     await window.api.addTrackToPlaylist(pid, trackPayload(pendingTrack));
-    await loadState(); render(); closeAddToPlaylistModal(); showToast('✅ Agregado a playlist');
+    await loadState(); render(); closeAddToPlaylistModal(); showToast(tr('t_added_pl'));
   } catch (err) { showToast('❌ ' + err.message); }
 };
 window.addTrackToPlaylist = async function (index, pid, source) {
   const list = (source === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.items : state.queue.items;
-  const t = list[index];
-  if (!t || !pid) return;
-  try { await window.api.addTrackToPlaylist(pid, trackPayload(t)); await loadState(); render(); showToast('✅ Agregado a playlist'); }
+  const tk = list[index];
+  if (!tk || !pid) return;
+  try { await window.api.addTrackToPlaylist(pid, trackPayload(tk)); await loadState(); render(); showToast(tr('t_added_pl')); }
   catch (err) { showToast('❌ ' + err.message); }
 };
 
@@ -589,11 +778,11 @@ window.searchYouTube = async function () {
   if (!q) { showToast('⚠️ Escribe algo para buscar'); return; }
   const panel = $('searchResults'), content = $('searchResultsContent');
   panel.classList.remove('hidden');
-  content.innerHTML = '<div class="search-loading">Buscando en YouTube…</div>';
+  content.innerHTML = `<div class="search-loading">${tr('searching')}</div>`;
   try {
     const results = await window.api.searchYouTube(q);
     if (!results || !results.length) {
-      content.innerHTML = '<div class="search-empty">Sin resultados. Intenta con otra búsqueda.</div>';
+      content.innerHTML = `<div class="search-empty">${tr('no_results')}</div>`;
       return;
     }
     content.innerHTML = results.map(r => `
@@ -605,7 +794,7 @@ window.searchYouTube = async function () {
         </div>
       </div>`).join('');
   } catch (err) {
-    content.innerHTML = '<div class="search-error">Error al buscar.</div>';
+    content.innerHTML = `<div class="search-error">${tr('search_error')}</div>`;
   }
 };
 window.addSearchResultToQueue = async function (videoId) {
@@ -613,6 +802,70 @@ window.addSearchResultToQueue = async function (videoId) {
   catch { showToast('❌ Error al agregar'); }
 };
 window.closeSearchResults = function () { $('searchResults').classList.add('hidden'); $('ytInput').value = ''; };
+
+// ════ MODO YOUTUBE MUSIC + DESCARGAS ══════════════════════
+window.openYtMusic = async function () {
+  document.body.classList.add('ytm-mode');
+  const bar = $('ytmBar'); if (bar) bar.classList.remove('hidden');
+  try { await window.api.toggleYtMusic(true); } catch (e) {}
+};
+window.exitYtMusic = async function () {
+  document.body.classList.remove('ytm-mode');
+  const bar = $('ytmBar'); if (bar) bar.classList.add('hidden');
+  try { await window.api.toggleYtMusic(false); } catch (e) {}
+};
+window.ytmHome = async function () { try { await window.api.ytmHome(); } catch (e) {} };
+window.ytmBack = async function () { try { await window.api.ytmBack(); } catch (e) {} };
+let dlBusy = false; // evita clics repetidos mientras hay una descarga en curso
+window.downloadCurrentYtm = async function () {
+  if (dlBusy) return;
+  dlBusy = true;
+  showDownloadProgress({ stage: 'preparing', percent: 0 });
+  try { await window.api.downloadCurrentYtm(); }
+  catch (err) { showDownloadProgress({ stage: 'error', percent: 0, message: err.message }); }
+};
+window.downloadTrack = async function (videoId) {
+  if (!videoId || dlBusy) return;
+  dlBusy = true;
+  showDownloadProgress({ stage: 'preparing', percent: 0 });
+  try { await window.api.downloadByVideoId(videoId); }
+  catch (err) { showDownloadProgress({ stage: 'error', percent: 0, message: err.message }); }
+};
+window.openDownloadsFolder = async function () { try { await window.api.openDownloadsFolder(); } catch (e) {} };
+window.chooseDownloadDir = async function () {
+  try {
+    const dir = await window.api.chooseDownloadDir();
+    if (dir) { state.settings.downloadDir = dir; if ($('downloadDirLabel')) $('downloadDirLabel').textContent = dir; }
+  } catch (e) {}
+};
+
+// Toast de progreso de descarga (se actualiza en vivo)
+function showDownloadProgress(p) {
+  // En modo YT Music el toast queda detrás del WebContentsView, así que el
+  // estado se refleja también en el botón Descargar de la barra superior.
+  updateYtmDlButton(p);
+
+  let el = document.querySelector('.dl-toast');
+  if (!el) { el = document.createElement('div'); el.className = 'toast dl-toast'; document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('show')); }
+  // Cancela cualquier cierre pendiente para que una descarga nueva no herede el timer de la anterior.
+  if (el._closeTimer) { clearTimeout(el._closeTimer); el._closeTimer = null; }
+  const close = (ms) => { el._closeTimer = setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, ms); };
+  if (p.stage === 'done') { dlBusy = false; el.textContent = tr('t_dl_done'); close(2600); loadState().then(() => render()); return; }
+  if (p.stage === 'error') { dlBusy = false; el.textContent = '❌ ' + (p.message || tr('t_dl_error')); close(3500); return; }
+  if (p.stage === 'preparing') { el.textContent = tr('t_dl_start'); return; }
+  const label = p.stage === 'converting' ? tr('t_dl_converting') : tr('t_dl_downloading');
+  el.textContent = `⬇ ${label} ${Math.round(p.percent || 0)}%`;
+}
+function updateYtmDlButton(p) {
+  const lbl = $('ytmDlLabel'), btn = $('ytmDlBtn');
+  if (!lbl || !btn) return;
+  if (p.stage === 'done') { lbl.textContent = '✓'; setTimeout(() => { lbl.textContent = tr('download'); btn.classList.remove('busy'); }, 2200); return; }
+  if (p.stage === 'error') { lbl.textContent = '✕'; btn.classList.remove('busy'); setTimeout(() => { lbl.textContent = tr('download'); }, 2500); return; }
+  btn.classList.add('busy');
+  if (p.stage === 'preparing') { lbl.textContent = '…'; return; }
+  if (p.stage === 'converting') { lbl.textContent = 'MP3…'; return; }
+  lbl.textContent = Math.round(p.percent || 0) + '%';
+}
 
 // ════ EXTRAS (filtro, temporizador, atajos, notificaciones) ═
 let queueFilter = '';
@@ -635,7 +888,7 @@ window.toggleSleepMenu = function (e) {
   const btn = $('btnSleep');
   const menu = document.createElement('div');
   menu.className = 'sleep-menu';
-  const opts = [['15 minutos', 15], ['30 minutos', 30], ['45 minutos', 45], ['1 hora', 60], ['Cancelar', 0]];
+  const opts = [[tr('sleep_15'), 15], [tr('sleep_30'), 30], [tr('sleep_45'), 45], [tr('sleep_60'), 60], [tr('sleep_cancel'), 0]];
   menu.innerHTML = opts.map(([label, val]) => `<button onclick="setSleep(${val})">${label}</button>`).join('');
   document.body.appendChild(menu);
   const r = btn.getBoundingClientRect();
@@ -689,13 +942,13 @@ function nudgeVolume(delta) {
 window.showShortcuts = function () {
   if (document.querySelector('.shortcuts-modal')) return;
   const rows = [
-    ['Espacio', 'Reproducir / Pausar'], ['→ / ←', 'Siguiente / Anterior'],
-    ['↑ / ↓', 'Subir / bajar volumen'], ['M', 'Silenciar'], ['S', 'Aleatorio'],
-    ['R', 'Repetir'], ['/', 'Ir a la búsqueda'], ['?', 'Esta ayuda'], ['Esc', 'Cerrar']
+    ['Espacio', tr('sc_playpause')], ['→ / ←', tr('sc_nextprev')],
+    ['↑ / ↓', tr('sc_volume')], ['M', tr('sc_mute')], ['S', tr('sc_shuffle')],
+    ['R', tr('sc_repeat')], ['/', tr('sc_search')], ['?', tr('sc_help')], ['Esc', tr('sc_close')]
   ];
   const modal = document.createElement('div');
   modal.className = 'modal shortcuts-modal';
-  modal.innerHTML = `<div class="modal-card"><div class="modal-head"><h3>Atajos de teclado</h3>
+  modal.innerHTML = `<div class="modal-card"><div class="modal-head"><h3>${tr('shortcuts_heading')}</h3>
     <button class="icon-btn" onclick="this.closest('.modal').remove()">${icon('x', 16)}</button></div>
     <div class="shortcuts-list">${rows.map(([k, d]) => `<div class="sc-row"><kbd>${k}</kbd><span>${escapeHtml(d)}</span></div>`).join('')}</div></div>`;
   modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
@@ -746,17 +999,17 @@ function favPlaylist() { return state.playlists.find(isFavPlaylist) || null; }
 function isFav(t) { const f = favPlaylist(); return !!(f && f.items.some(x => sameTrack(x, t))); }
 window.toggleFav = async function (index, source) {
   const list = (source === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.items : state.queue.items;
-  const t = list[index];
-  if (t) await toggleFavoriteTrack(t);
+  const tk = list[index];
+  if (tk) await toggleFavoriteTrack(tk);
 };
-async function toggleFavoriteTrack(t) {
+async function toggleFavoriteTrack(tk) {
   try {
     let fav = favPlaylist();
     if (fav) {
-      const existing = fav.items.find(x => sameTrack(x, t));
+      const existing = fav.items.find(x => sameTrack(x, tk));
       if (existing) {
         await window.api.removeTrackFromPlaylist(fav.id, existing.id);
-        await loadState(); render(); showToast('🤍 Quitado de favoritos'); return;
+        await loadState(); render(); showToast(tr('t_fav_removed')); return;
       }
     } else {
       // Autocrear "Favoritos" con el corazón 💜 como icono
@@ -765,7 +1018,7 @@ async function toggleFavoriteTrack(t) {
       fav = favPlaylist();
       if (fav && !fav.cover) await window.api.setPlaylistCover(fav.id, FAV_EMOJI);
     }
-    if (fav) { await window.api.addTrackToPlaylist(fav.id, trackPayload(t)); await loadState(); render(); showToast('💜 Agregado a favoritos'); }
+    if (fav) { await window.api.addTrackToPlaylist(fav.id, trackPayload(tk)); await loadState(); render(); showToast(tr('t_fav_added')); }
   } catch (err) { showToast('❌ ' + err.message); }
 }
 
@@ -797,25 +1050,77 @@ window.onQDrop = async function (e, i) {
   try { await window.api.moveInQueue(from, i); } catch (err) {}
 };
 
-// ════ FASE 4 (visualizador + ecualizador) ══════════════════
-let vizBars = 0;
+// ════ FASE 4 (visualizador audio-reactivo en canvas + ecualizador) ══════════
+function getCss(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+let vizTarget = [];   // últimos niveles recibidos del player (FFT real)
+let vizCur = [];      // valores interpolados que se dibujan (suavizado)
+let vizLooping = false;
 function renderVisualizer(levels) {
-  const eq = $('equalizer');
-  if (!eq) return;
-  if (!levels || !levels.length) {
-    if (eq.classList.contains('live')) {
-      eq.classList.remove('live');
-      eq.innerHTML = '<span></span><span></span><span></span><span></span><span></span>';
-      vizBars = 0;
+  vizTarget = (levels && levels.length) ? levels : [];
+  if (!vizLooping) { vizLooping = true; requestAnimationFrame(vizTick); }
+}
+function vizTick() {
+  const canvas = $('vizCanvas');
+  if (!canvas) { vizLooping = false; return; }
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const n = vizTarget.length;
+
+  if (n > 0 && vizCur.length !== n) vizCur = new Array(n).fill(0);
+  const len = n > 0 ? n : vizCur.length;
+  let energy = 0;
+  for (let i = 0; i < len; i++) {
+    const tgt = n > 0 ? (vizTarget[i] || 0) : 0;
+    const ease = n > 0 ? 0.4 : 0.12; // sube rápido, decae suave
+    vizCur[i] = (vizCur[i] || 0) + (tgt - (vizCur[i] || 0)) * ease;
+    energy += vizCur[i];
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  if (vizCur.length) {
+    const accent = getCss('--accent') || '#ff2e97';
+    const cyan = getCss('--neon-cyan') || '#00e5ff';
+    const count = vizCur.length;
+    const gap = 2;
+    const bw = Math.max(1, (W - gap * (count - 1)) / count);
+    const baseY = H * 0.82;            // línea de base de las barras
+    for (let i = 0; i < count; i++) {
+      const v = Math.max(0, Math.min(100, vizCur[i]));
+      const bh = Math.max(2, (v / 100) * (baseY - 2));
+      const x = i * (bw + gap);
+      const yTop = baseY - bh;
+      const grad = ctx.createLinearGradient(0, yTop, 0, baseY);
+      grad.addColorStop(0, cyan);
+      grad.addColorStop(1, accent);
+      ctx.fillStyle = grad;
+      ctx.shadowColor = accent;
+      ctx.shadowBlur = 8;
+      roundRectTop(ctx, x, yTop, bw, bh, Math.min(bw / 2, 3));
+      // reflejo tenue bajo la línea de base
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.16;
+      const rh = Math.min(bh * 0.5, H - baseY);
+      ctx.fillRect(x, baseY + 1, bw, rh);
+      ctx.globalAlpha = 1;
     }
-    return;
   }
-  eq.classList.add('live');
-  if (vizBars !== levels.length) { eq.innerHTML = levels.map(() => '<span></span>').join(''); vizBars = levels.length; }
-  const spans = eq.children;
-  for (let i = 0; i < levels.length; i++) {
-    if (spans[i]) spans[i].style.height = (5 + (levels[i] / 100) * 17).toFixed(1) + 'px';
-  }
+
+  if (n > 0 || energy > 0.5) requestAnimationFrame(vizTick);
+  else { ctx.clearRect(0, 0, W, H); vizCur = []; vizLooping = false; }
+}
+function roundRectTop(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h);
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
 }
 window.applyEq = function () {
   const gains = [0, 1, 2, 3, 4].map(i => { const el = $('eq' + i); return el ? parseInt(el.value) : 0; });
@@ -862,13 +1167,15 @@ function queueItemHtml(track, i, opts) {
     ? `<img src="${thumb}" alt="">`
     : `<span class="ph">${local && track.mediaType === 'video' ? icon('film', 18) : icon('music', 18)}</span>`;
   const tag = local ? '<span class="tag local">Local</span>' : '<span class="tag yt">YouTube</span>';
-  const author = escapeHtml(track.author || (local ? 'Archivo local' : 'YouTube'));
+  const author = escapeHtml(track.author || (local ? tr('local_file') : 'YouTube'));
   // En la vista de una playlist no ofrezcas la playlist actual (evita duplicar)
   const curPlId = (state.viewMode === 'playlist' && state.selectedPlaylist) ? state.selectedPlaylist.id : null;
   const addable = state.playlists.filter(pl => pl.id !== curPlId);
   const plOpts = addable.map(pl => `<option value="${pl.id}">${escapeHtml(pl.name)}</option>`).join('');
   const copyBtn = (!local && track.videoId)
     ? `<button onclick="event.stopPropagation(); copyYoutubeLink('${track.videoId}')" title="Copiar link">${icon('link', 14)}</button>` : '';
+  const dlBtn = (!local && track.videoId)
+    ? `<button onclick="event.stopPropagation(); downloadTrack('${track.videoId}')" title="${tr('download_mp3')}">${icon('download', 14)}</button>` : '';
   const plSelect = addable.length
     ? `<select class="add-to-playlist-select" data-track-index="${i}" data-source="${curPlId ? 'playlist' : 'queue'}" onclick="event.stopPropagation();"><option value="">+ Playlist</option>${plOpts}</select>` : '';
   const faved = isFav(track);
@@ -886,7 +1193,7 @@ function queueItemHtml(track, i, opts) {
         <div class="queue-item-meta">${tag}${author}</div>
       </div>
       <div class="queue-item-actions">
-        ${favBtn}${queueBtn}${copyBtn}${plSelect}
+        ${favBtn}${queueBtn}${copyBtn}${dlBtn}${plSelect}
         ${opts.removeBtn}
       </div>
     </div>`;
@@ -894,22 +1201,22 @@ function queueItemHtml(track, i, opts) {
 
 function renderQueue() {
   const c = $('queueItems'), count = $('queueCount'), title = $('queueTitle');
-  if (title) title.textContent = 'Cola de reproducción';
-  if (count) count.textContent = `${state.queue.items.length} ${state.queue.items.length === 1 ? 'pista' : 'pistas'}`;
+  if (title) title.textContent = tr('queue_title');
+  if (count) count.textContent = trackCount(state.queue.items.length);
   if (!c) return;
   if (!state.queue.items.length) {
-    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('music', 30)}</div><div class="empty-state-text">Cola vacía. Agrega música local o de YouTube.</div></div>`;
+    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('music', 30)}</div><div class="empty-state-text">${tr('queue_empty')}</div></div>`;
     return;
   }
   c.innerHTML = state.queue.items
-    .map((t, i) => ({ t, i }))
-    .filter(({ t }) => matchesFilter(t))
-    .map(({ t, i }) => queueItemHtml(t, i, {
+    .map((tk, i) => ({ tk, i }))
+    .filter(({ tk }) => matchesFilter(tk))
+    .map(({ tk, i }) => queueItemHtml(tk, i, {
       active: i === state.queue.currentIndex,
       onclick: `playAtIndex(${i})`,
       draggable: !queueFilter,
       removeBtn: `<button onclick="event.stopPropagation(); removeFromQueue(${i})" title="Quitar">${icon('x', 14)}</button>`
-    })).join('') || `<div class="empty-state"><div class="empty-state-text">Sin coincidencias para “${escapeHtml(queueFilter)}”.</div></div>`;
+    })).join('') || `<div class="empty-state"><div class="empty-state-text">${tr('no_matches', { q: escapeHtml(queueFilter) })}</div></div>`;
 }
 
 function renderPlaylistView() {
@@ -919,20 +1226,21 @@ function renderPlaylistView() {
   if (title) title.innerHTML = `<button class="back-btn" onclick="backToQueue()" title="Volver">${icon('back', 18)}</button>` +
     `<span class="pl-cover" onclick="changeCover('${pl.id}')" title="Cambiar icono">${pl.cover ? `<span class="cover-emoji">${escapeHtml(pl.cover)}</span>` : icon('music', 16)}<span class="pl-cover-edit">${icon('plus', 11)}</span></span>` +
     escapeHtml(pl.name);
-  if (count) count.textContent = `${pl.items.length} ${pl.items.length === 1 ? 'pista' : 'pistas'}`;
+  if (count) count.textContent = trackCount(pl.items.length);
   if (!pl.items.length) {
-    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('folder', 30)}</div><div class="empty-state-text">Playlist vacía.</div></div>`;
+    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('folder', 30)}</div><div class="empty-state-text">${tr('playlist_empty')}</div></div>`;
     return;
   }
   c.innerHTML = `<div class="playlist-toolbar">
-      <button class="play-all-btn" onclick="playFromPlaylist('${pl.id}', 0)">${icon('play', 14)} Reproducir todo</button>
-      <button class="play-all-btn ghost" onclick="playShuffle('${pl.id}')">${icon('shuffle', 14)} Aleatorio</button>
-      <button class="play-all-btn ghost" onclick="appendPlaylist('${pl.id}')">${icon('plus', 14)} Cola</button>
+      <button class="play-all-btn" onclick="playFromPlaylist('${pl.id}', 0)">${icon('play', 14)} ${tr('play_all')}</button>
+      <button class="play-all-btn ghost" onclick="playShuffle('${pl.id}')">${icon('shuffle', 14)} ${tr('shuffle')}</button>
+      <button class="play-all-btn ghost" onclick="appendPlaylist('${pl.id}')">${icon('plus', 14)} ${tr('to_queue')}</button>
+      ${pl.name === 'Descargadas' ? `<button class="play-all-btn ghost" onclick="openDownloadsFolder()">${icon('folder', 14)} ${tr('open_folder')}</button>` : ''}
     </div>` +
-    pl.items.map((t, i) => ({ t, i })).filter(({ t }) => matchesFilter(t)).map(({ t, i }) => queueItemHtml(t, i, {
+    pl.items.map((tk, i) => ({ tk, i })).filter(({ tk }) => matchesFilter(tk)).map(({ tk, i }) => queueItemHtml(tk, i, {
       active: false,
       onclick: `playFromPlaylist('${pl.id}', ${i})`,
-      removeBtn: `<button onclick="event.stopPropagation(); removeFromPlaylist('${pl.id}', '${t.id}')" title="Quitar">${icon('trash', 15)}</button>`
+      removeBtn: `<button onclick="event.stopPropagation(); removeFromPlaylist('${pl.id}', '${tk.id}')" title="Quitar">${icon('trash', 15)}</button>`
     })).join('');
 }
 
@@ -971,15 +1279,16 @@ function renderNowPlaying() {
     heroBadge.classList.remove('hidden');
     heroBadge.textContent = isLocal(cur) ? 'Local' : 'YouTube';
     heroBadge.className = 'src-badge ' + (isLocal(cur) ? 'local' : 'yt');
+    const author = cur.author || (isLocal(cur) ? tr('local_file') : 'YouTube');
     $('nowTitle').textContent = cur.title || cur.videoId || 'Pista';
-    $('nowMeta').textContent = cur.author || (isLocal(cur) ? 'Archivo local' : 'YouTube');
+    $('nowMeta').textContent = metaLine(cur);
     $('playerTrackName').textContent = cur.title || cur.videoId || 'Pista';
-    $('playerTrackMeta').textContent = cur.author || (isLocal(cur) ? 'Archivo local' : 'YouTube');
+    $('playerTrackMeta').textContent = author;
   } else {
     heroImg.style.display = 'none'; heroFallback.style.display = 'grid'; heroBadge.classList.add('hidden');
     pbImg.style.display = 'none'; pbIcon.style.display = 'grid';
-    $('nowTitle').textContent = 'Nada sonando';
-    $('nowMeta').textContent = 'Agrega música local o de YouTube para empezar';
+    $('nowTitle').textContent = tr('nothing_playing');
+    $('nowMeta').textContent = tr('add_music_hint');
     $('playerTrackName').textContent = '—';
     $('playerTrackMeta').textContent = '—';
   }

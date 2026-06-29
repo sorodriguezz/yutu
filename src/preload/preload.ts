@@ -64,6 +64,24 @@ contextBridge.exposeInMainWorld('api', {
   setAccentColor: (color: string) => ipcRenderer.invoke('settings:setAccent', color),
   setVolumeDefault: (volume: number) => ipcRenderer.invoke('settings:setVolumeDefault', volume),
   setYouTubeApiKey: (apiKey: string) => ipcRenderer.invoke('settings:setYouTubeApiKey', apiKey),
+  setCrossfade: (seconds: number) => ipcRenderer.invoke('settings:setCrossfade', seconds),
+  setLanguage: (lang: string) => ipcRenderer.invoke('settings:setLanguage', lang),
+  setTheme: (theme: { accentColor?: string; accentSecondary?: string; palette?: string }) =>
+    ipcRenderer.invoke('settings:setTheme', theme),
+  setBlockAds: (enabled: boolean) => ipcRenderer.invoke('settings:setBlockAds', enabled),
+  setDownloadDir: (dir: string) => ipcRenderer.invoke('settings:setDownloadDir', dir),
+  chooseDownloadDir: () => ipcRenderer.invoke('settings:chooseDownloadDir'),
+
+  // YouTube Music + descargas
+  toggleYtMusic: (visible: boolean) => ipcRenderer.invoke('ytm:toggle', visible),
+  ytmHome: () => ipcRenderer.invoke('ytm:home'),
+  ytmBack: () => ipcRenderer.invoke('ytm:back'),
+  downloadByVideoId: (videoId: string, title?: string) => ipcRenderer.invoke('download:byVideoId', videoId, title),
+  downloadCurrentYtm: () => ipcRenderer.invoke('download:currentYtm'),
+  openDownloadsFolder: () => ipcRenderer.invoke('download:openFolder'),
+  onDownloadProgress: (callback: (p: any) => void) => {
+    ipcRenderer.on('download:progress', (_, p) => callback(p));
+  },
 
   // Video visibility
   toggleVideo: (visible: boolean) => ipcRenderer.invoke('player:toggleVideo', visible),

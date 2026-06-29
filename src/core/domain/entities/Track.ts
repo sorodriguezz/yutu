@@ -16,6 +16,8 @@ export type Track = {
   // Common metadata
   title?: string;
   author?: string;
+  album?: string; // embedded tag (local files)
+  year?: number; // embedded tag (local files)
   thumbnail?: string; // URL / data-uri to artwork
   duration?: number; // seconds
   addedAt: number;

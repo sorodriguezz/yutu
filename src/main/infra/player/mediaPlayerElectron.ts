@@ -16,6 +16,10 @@ export class ElectronMediaPlayer implements PlayerPort {
     this.webContents.send("player:load", media);
   }
 
+  async crossfade(media: PlayableMedia, durationSec: number): Promise<void> {
+    this.webContents.send("player:crossfade", { media, durationSec });
+  }
+
   async play(): Promise<void> {
     this.webContents.send("player:play");
   }

@@ -26,7 +26,8 @@
     "asar": true,
     "asarUnpack": [
       "dist/renderer/**/*",
-      "dist/player/**/*"
+      "dist/player/**/*",
+      "node_modules/ffmpeg-static/**"
     ],
     "publish": [
       {
@@ -95,6 +96,7 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "electron-updater": "^6.7.3",
+    "ffmpeg-static": "^5.2.0",
     "music-metadata": "^10.6.4"
   }
 }

@@ -14,6 +14,8 @@ export type PlayableMedia = {
 
 export interface PlayerPort {
   load(media: PlayableMedia): Promise<void>;
+  /** Funde a la siguiente pista (audio local) sobre `durationSec` segundos. */
+  crossfade(media: PlayableMedia, durationSec: number): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   seek(seconds: number): Promise<void>;

@@ -12,6 +12,29 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- Barra superior del modo YouTube Music (cubre la franja sobre el WebContentsView) -->
+    <div id="ytmBar" class="ytm-bar hidden">
+      <button class="ytm-back" onclick="exitYtMusic()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span data-i18n="back_to_yutu">Volver a Yutu</span>
+      </button>
+      <div class="ytm-nav">
+        <button class="ytm-iconbtn" title="Atrás" data-i18n-title="ytm_page_back" onclick="ytmBack()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button class="ytm-iconbtn" title="Inicio de YouTube Music" data-i18n-title="ytm_home" onclick="ytmHome()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg>
+        </button>
+      </div>
+      <span class="ytm-title">YouTube Music</span>
+      <div class="ytm-bar-actions">
+        <button id="ytmDlBtn" class="ytm-dl" onclick="downloadCurrentYtm()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span id="ytmDlLabel" data-i18n="download">Descargar</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Animated synthwave backdrop -->
     <div class="scene" aria-hidden="true">
       <div class="scene-stars"></div>
@@ -50,28 +73,29 @@
           <button class="action-card action-local" onclick="addLocalFiles()">
             <span class="action-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg></span>
             <span class="action-body">
-              <span class="action-title">Archivos locales</span>
-              <span class="action-desc">MP3 · MP4 de tu PC</span>
+              <span class="action-title" data-i18n="local_files">Archivos locales</span>
+              <span class="action-desc" data-i18n="local_files_desc">MP3 · MP4 de tu PC</span>
             </span>
           </button>
           <button class="action-card" onclick="importPlaylist()">
             <span class="action-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
             <span class="action-body">
-              <span class="action-title">Importar playlist</span>
-              <span class="action-desc">Desde archivo .json</span>
+              <span class="action-title" data-i18n="import_playlist">Importar playlist</span>
+              <span class="action-desc" data-i18n="import_playlist_desc">Desde archivo .json</span>
             </span>
           </button>
         </div>
 
         <div class="library">
           <div class="library-head">
-            <h2>Tu biblioteca</h2>
-            <button class="icon-btn" title="Crear playlist" onclick="createPlaylistPrompt()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+            <h2 data-i18n="your_library">Tu biblioteca</h2>
+            <button class="icon-btn" title="Crear playlist" data-i18n-title="create_playlist" onclick="createPlaylistPrompt()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
           </div>
           <input
             id="newPlaylistName"
             class="ghost-input"
             placeholder="Nueva playlist…"
+            data-i18n-placeholder="new_playlist"
             onkeypress="if(event.key==='Enter') createPlaylist()"
           />
           <div id="playlistList" class="playlist-list"></div>
@@ -87,28 +111,33 @@
               <circle cx="11" cy="11" r="7"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input id="ytInput" type="text" placeholder="Busca en YouTube o pega una URL…" />
-            <button class="pill-btn" onclick="searchYouTube()">Buscar</button>
-            <button class="pill-btn ghost" onclick="addToQueue()">+ URL</button>
+            <input id="ytInput" type="text" placeholder="Busca en YouTube o pega una URL…" data-i18n-placeholder="search_placeholder" />
+            <button class="pill-btn" onclick="searchYouTube()" data-i18n="search">Buscar</button>
+            <button class="pill-btn ghost" onclick="addToQueue()" data-i18n="add_url">+ URL</button>
           </div>
           <div class="top-actions">
-            <button id="btnToggleVideo" class="icon-btn lg" title="Mostrar / ocultar video">
+            <button id="btnYtMusic" class="icon-btn lg ytm-btn" title="YouTube Music" data-i18n-title="open_ytmusic" onclick="openYtMusic()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"></polygon>
+              </svg>
+            </button>
+            <button id="btnToggleVideo" class="icon-btn lg" title="Mostrar / ocultar video" data-i18n-title="toggle_video">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="23 7 16 12 23 17 23 7"></polygon>
                 <rect x="1" y="5" width="15" height="14" rx="2"></rect>
               </svg>
             </button>
-            <button id="btnSleep" class="icon-btn lg" title="Temporizador de apagado" onclick="toggleSleepMenu(event)">
+            <button id="btnSleep" class="icon-btn lg" title="Temporizador de apagado" data-i18n-title="sleep_timer" onclick="toggleSleepMenu(event)">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline>
               </svg>
             </button>
-            <button class="icon-btn lg" title="Atajos de teclado (?)" onclick="showShortcuts()">
+            <button class="icon-btn lg" title="Atajos de teclado (?)" data-i18n-title="shortcuts_title" onclick="showShortcuts()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line>
               </svg>
             </button>
-            <button class="icon-btn lg" title="Ajustes" onclick="toggleSettings()">
+            <button class="icon-btn lg" title="Ajustes" data-i18n-title="settings" onclick="toggleSettings()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -120,7 +149,7 @@
         <!-- Search results -->
         <section id="searchResults" class="panel search-panel hidden">
           <div class="panel-head">
-            <h3>Resultados</h3>
+            <h3 data-i18n="results">Resultados</h3>
             <button class="icon-btn" onclick="closeSearchResults()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div id="searchResultsContent" class="search-grid"></div>
@@ -136,21 +165,19 @@
             <span id="heroBadge" class="src-badge hidden"></span>
           </div>
           <div class="hero-info">
-            <span class="hero-eyebrow" id="heroEyebrow">REPRODUCIENDO AHORA</span>
-            <h2 class="hero-title" id="nowTitle">Nada sonando</h2>
-            <p class="hero-meta" id="nowMeta">Agrega música local o de YouTube para empezar</p>
-            <div class="equalizer" id="equalizer">
-              <span></span><span></span><span></span><span></span><span></span>
-            </div>
+            <span class="hero-eyebrow" id="heroEyebrow" data-i18n="now_playing">REPRODUCIENDO AHORA</span>
+            <h2 class="hero-title" id="nowTitle" data-i18n="nothing_playing">Nada sonando</h2>
+            <p class="hero-meta" id="nowMeta" data-i18n="add_music_hint">Agrega música local o de YouTube para empezar</p>
+            <canvas class="viz-canvas" id="vizCanvas" width="640" height="96" aria-hidden="true"></canvas>
           </div>
         </section>
 
         <!-- Queue -->
         <section class="queue">
           <div class="queue-head">
-            <h3 id="queueTitle">Cola de reproducción</h3>
-            <span id="queueCount" class="count-chip">0 pistas</span>
-            <input id="queueFilter" class="queue-filter" type="text" placeholder="Filtrar…" oninput="onQueueFilter(this.value)" />
+            <h3 id="queueTitle" data-i18n="queue_title">Cola de reproducción</h3>
+            <span id="queueCount" class="count-chip">0</span>
+            <input id="queueFilter" class="queue-filter" type="text" placeholder="Filtrar…" data-i18n-placeholder="filter" oninput="onQueueFilter(this.value)" />
           </div>
           <div id="queueItems" class="queue-list"></div>
         </section>
@@ -228,17 +255,48 @@
     <div id="settingsPanel" class="drawer hidden">
       <div class="drawer-card">
         <div class="drawer-head">
-          <h3>Ajustes</h3>
+          <h3 data-i18n="settings">Ajustes</h3>
           <button class="icon-btn" onclick="toggleSettings()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
 
+        <div class="setting col">
+          <div class="setting-label"><span data-i18n="palette">Paleta synthwave</span><small data-i18n="palette_desc">Elige un esquema neón</small></div>
+          <div id="paletteGrid" class="palette-grid"></div>
+        </div>
+
         <div class="setting">
-          <div class="setting-label"><span>Color de acento</span><small>Tiñe la interfaz neón</small></div>
+          <div class="setting-label"><span data-i18n="custom_color">Color personalizado</span><small data-i18n="custom_color_desc">Define tu propio acento</small></div>
           <input id="accentColor" type="color" class="color-input" />
         </div>
 
         <div class="setting">
-          <div class="setting-label"><span>Volumen inicial</span><small>Al abrir la app</small></div>
+          <div class="setting-label"><span data-i18n="language">Idioma</span><small data-i18n="language_desc">Idioma de la interfaz</small></div>
+          <div class="seg" id="langSeg">
+            <button type="button" class="seg-btn" data-lang="es" onclick="setLanguage('es')">ES</button>
+            <button type="button" class="seg-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
+          </div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-label"><span data-i18n="crossfade">Crossfade</span><small data-i18n="crossfade_desc">Fundido entre canciones (audio local)</small></div>
+          <div class="setting-ctl">
+            <input id="crossfade" type="range" min="0" max="12" value="5" class="slider" />
+            <span id="crossfadeLabel" class="vol-val">5s</span>
+          </div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-label"><span data-i18n="block_ads">Bloquear anuncios</span><small data-i18n="block_ads_desc">En el modo YouTube Music</small></div>
+          <label class="switch"><input id="blockAds" type="checkbox" /><span class="switch-track"></span></label>
+        </div>
+
+        <div class="setting">
+          <div class="setting-label"><span data-i18n="download_folder">Carpeta de descargas</span><small id="downloadDirLabel">—</small></div>
+          <button class="pill-btn ghost" onclick="chooseDownloadDir()" data-i18n="choose">Elegir</button>
+        </div>
+
+        <div class="setting">
+          <div class="setting-label"><span data-i18n="initial_volume">Volumen inicial</span><small data-i18n="initial_volume_desc">Al abrir la app</small></div>
           <div class="setting-ctl">
             <input id="volumeDefault" type="range" min="0" max="100" value="60" class="slider" />
             <span id="volumeDefaultLabel" class="vol-val">60</span>
@@ -246,13 +304,13 @@
         </div>
 
         <div class="setting col">
-          <div class="setting-label"><span>Ecualizador</span><small>Solo para archivos locales · <a class="link" href="#" onclick="event.preventDefault(); resetEq()">Reset</a></small></div>
+          <div class="setting-label"><span data-i18n="equalizer">Ecualizador</span><small><span data-i18n="equalizer_desc">Solo para archivos locales</span> · <a class="link" href="#" data-i18n="reset" onclick="event.preventDefault(); resetEq()">Reset</a></small></div>
           <div class="eq-bands">
-            <div class="eq-band"><input id="eq0" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Graves</span><span class="eq-hz">60 Hz</span></div>
-            <div class="eq-band"><input id="eq1" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Medio-bajo</span><span class="eq-hz">230 Hz</span></div>
-            <div class="eq-band"><input id="eq2" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Medios</span><span class="eq-hz">910 Hz</span></div>
-            <div class="eq-band"><input id="eq3" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Medio-alto</span><span class="eq-hz">3.6 kHz</span></div>
-            <div class="eq-band"><input id="eq4" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name">Agudos</span><span class="eq-hz">14 kHz</span></div>
+            <div class="eq-band"><input id="eq0" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name" data-i18n="eq_bass">Graves</span><span class="eq-hz">60 Hz</span></div>
+            <div class="eq-band"><input id="eq1" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name" data-i18n="eq_lowmid">Medio-bajo</span><span class="eq-hz">230 Hz</span></div>
+            <div class="eq-band"><input id="eq2" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name" data-i18n="eq_mid">Medios</span><span class="eq-hz">910 Hz</span></div>
+            <div class="eq-band"><input id="eq3" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name" data-i18n="eq_himid">Medio-alto</span><span class="eq-hz">3.6 kHz</span></div>
+            <div class="eq-band"><input id="eq4" class="eq-slider" type="range" min="-12" max="12" value="0" oninput="applyEq()" /><span class="eq-name" data-i18n="eq_treble">Agudos</span><span class="eq-hz">14 kHz</span></div>
           </div>
         </div>
 
@@ -263,14 +321,14 @@
     <div id="addToPlaylistModal" class="modal hidden">
       <div class="modal-card">
         <div class="modal-head">
-          <h3>Agregado a la cola</h3>
+          <h3 data-i18n="added_to_queue">Agregado a la cola</h3>
           <button class="icon-btn" onclick="closeAddToPlaylistModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <p id="addedTrackName" class="modal-track"></p>
-        <p class="modal-q">¿Guardarla también en una playlist?</p>
+        <p class="modal-q" data-i18n="save_to_playlist_q">¿Guardarla también en una playlist?</p>
         <div id="playlistOptions" class="opt-list"></div>
         <div class="modal-foot">
-          <button class="pill-btn ghost" onclick="closeAddToPlaylistModal()">No, gracias</button>
+          <button class="pill-btn ghost" onclick="closeAddToPlaylistModal()" data-i18n="no_thanks">No, gracias</button>
         </div>
       </div>
     </div>
