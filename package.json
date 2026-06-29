@@ -1,7 +1,7 @@
 {
   "name": "yutu",
   "author": "sorodriguezz",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Yutu — reproductor synthwave: música local (MP3/MP4), YouTube y cuenta de Google.",
   "main": "dist/main/main.js",
   "scripts": {

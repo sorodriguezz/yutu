@@ -374,11 +374,6 @@ export function registerIpc(
     const queueState = c.queue.getState();
     win()?.webContents.send('queue:update', queueState);
   }
-
-  // Send initial queue update when renderer loads
-  setInterval(() => {
-    if (win()?.webContents) {
-      sendQueueUpdate();
-    }
-  }, 1000);
+  // Nota: no usamos un setInterval para reenviar la cola; cada acción ya llama
+  // a sendQueueUpdate(). Evita IPC constante (importante con carátulas en base64).
 }

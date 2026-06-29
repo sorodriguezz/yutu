@@ -118,15 +118,17 @@ function ensureAudioGraph() {
 function startVisualizer() {
   if (vizRunning || !analyser) return; vizRunning = true;
   const data = new Uint8Array(analyser.frequencyBinCount);
-  let last = 0;
+  let last = 0, sentEmpty = false;
   function tick() {
     requestAnimationFrame(tick);
     const now = performance.now();
-    if (now - last < 55) return; last = now;
+    if (now - last < 60) return; last = now;
     if (!analyser || currentMode !== 'local' || localMedia.paused) {
-      if (window.playerApi) window.playerApi.sendLevels([]);
+      // manda vacío una sola vez al detenerse (evita IPC constante)
+      if (!sentEmpty && window.playerApi) { window.playerApi.sendLevels([]); sentEmpty = true; }
       return;
     }
+    sentEmpty = false;
     analyser.getByteFrequencyData(data);
     const bins = data.length, N = 22, step = Math.max(1, Math.floor(bins / N)), out = [];
     for (let i = 0; i < N; i++) {
